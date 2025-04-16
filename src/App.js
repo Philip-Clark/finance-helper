@@ -307,7 +307,7 @@ const App = () => {
   const calculateScatterData = () => {
     return filteredData.map((transaction) => ({
       x: transaction.date,
-      y: transaction.debit > 0 ? -transaction.debit : transaction.credit,
+      y: transaction.debit > 0 ? transaction.debit : -transaction.credit, // Reverse the logic
     }));
   };
 
