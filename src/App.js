@@ -438,15 +438,16 @@ const App = () => {
     setDateRange({ start: startDate, end: endDate });
   };
 
-  const calculateCumulativeCardData = () => {
-    let cumulative = 0;
+  const calculateCardExpenses = () => {
+    let cumulativeDebt = 0;
     return weeklyCardDates.map((date) => {
-      cumulative += weeklyCardExpenses[weeklyCardDates.indexOf(date)] - weeklyCardPayments[weeklyCardDates.indexOf(date)];
-      return cumulative;
+      cumulativeDebt += weeklyCardExpenses[weeklyCardDates.indexOf(date)];
+      cumulativeDebt -= weeklyCardPayments[weeklyCardDates.indexOf(date)];
+      return cumulativeDebt;
     });
   };
 
-  const cumulativeCardData = calculateCumulativeCardData();
+  const cardExpensesData = calculateCardExpenses();
 
   return (
     <div style={styles.container}>
@@ -484,7 +485,7 @@ const App = () => {
                 onClick={() => setActiveTab("cumulative")}
                 style={styles.button(activeTab === "cumulative")}
               >
-                Card Cumulative History
+                Card Expenses
               </button>
               <button
                 onClick={() => setActiveTab("scatter")}
@@ -608,12 +609,12 @@ const App = () => {
                 labels: weeklyCardDates,
                 datasets: [
                   {
-                    label: "Cumulative Card Balance",
-                    data: cumulativeCardData,
-                    borderColor: "purple",
+                    label: "Card Expenses",
+                    data: cardExpensesData,
+                    borderColor: "red",
                     fill: false,
-                    pointBackgroundColor: "purple",
-                    pointBorderColor: "purple",
+                    pointBackgroundColor: "red",
+                    pointBorderColor: "red",
                     pointRadius: 8, // Increase dot size
                   },
                 ],
@@ -624,7 +625,7 @@ const App = () => {
                   tooltip: {
                     callbacks: {
                       label: (context) =>
-                        `Balance: ${context.raw.toLocaleString("en-US", {
+                        `Debt: ${context.raw.toLocaleString("en-US", {
                           style: "currency",
                           currency: "USD",
                         })}`,
@@ -692,7 +693,7 @@ const App = () => {
 
       {transactionDialog.isOpen && (
         <div style={styles.modalOverlay}>
-          <div style={styles.modalContent}>
+          <div style={styles.modalContent}></div>
             <h3>Transactions</h3>
             <div style={styles.transactionTableContainer}>
               <table style={styles.transactionTable}>
