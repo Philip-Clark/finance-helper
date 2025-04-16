@@ -16,7 +16,9 @@
     "react-dom": "^19.1.0",
     "react-scripts": "5.0.1",
     "web-vitals": "^2.1.4",
-    "date-fns": "^2.30.0"
+    "date-fns": "^2.30.0",
+    "chartjs-adapter-date-fns": "^3.0.0",
+    "react-date-range": "^1.4.0"
   },
   "scripts": {
     "start": "react-scripts start",
