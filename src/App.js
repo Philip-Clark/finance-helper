@@ -422,6 +422,25 @@ const App = () => {
     setTransactionDialog({ isOpen: true, transactions: transactionsForDay });
   };
 
+  const handleAccountPointClick = (context) => {
+    if (!context.length) {
+      console.log("No data point was clicked.");
+      return; // Ensure a data point was clicked
+    }
+    const index = context[0].index;
+    const label = dailyDates[index]; // Use dailyDates to get the correct date label
+    const startOfDay = new Date(label);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(label);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const transactionsForDay = transactions.filter(
+      (t) => t.date >= startOfDay && t.date <= endOfDay
+    );
+    console.log("Transactions for the day:", transactionsForDay);
+    setTransactionDialog({ isOpen: true, transactions: transactionsForDay });
+  };
+
   const calculateSummary = (transactions) => {
     const totalAmount = transactions.reduce(
       (sum, t) => sum + (t.debit > 0 ? -t.debit : t.credit),
@@ -448,6 +467,57 @@ const App = () => {
   };
 
   const cardExpensesData = calculateCardExpenses();
+
+  const handleMonthlyBarClick = (context) => {
+    if (!context.length) {
+      console.log("No data point was clicked.");
+      return; // Ensure a data point was clicked
+    }
+    const index = context[0].index;
+    const datasetIndex = context[0].datasetIndex; // Determine if it's income or expense
+    const monthLabel = ratioMonths[index]; // Use the index to get the correct month label
+    const [year, month] = monthLabel.split("-");
+
+    console.log("Monthly range:", { year, month });
+
+    const transactionsForMonth = transactions.filter((t) => {
+      const transactionYear = t.date.getFullYear();
+      const transactionMonth = t.date.getMonth() + 1; // Months are 0-indexed
+      return transactionYear === parseInt(year) && transactionMonth === parseInt(month);
+    });
+
+    if (datasetIndex === 0) {
+      // Income dataset
+      const incomeTransactions = transactionsForMonth.filter((t) => t.credit > 0);
+      console.log("Income transactions for the month:", incomeTransactions);
+      setTransactionDialog({ isOpen: true, transactions: incomeTransactions });
+    } else if (datasetIndex === 1) {
+      // Expense dataset
+      const expenseTransactions = transactionsForMonth.filter((t) => t.debit > 0);
+      console.log("Expense transactions for the month:", expenseTransactions);
+      setTransactionDialog({ isOpen: true, transactions: expenseTransactions });
+    }
+  };
+
+  const handleAccountWeeklyPointClick = (context) => {
+    if (!context.length) {
+      console.log("No data point was clicked.");
+      return; // Ensure a data point was clicked
+    }
+    const index = context[0].index;
+    const label = dailyDates[index]; // Use dailyDates to get the correct date label
+    const startOfWeekDate = startOfWeek(new Date(label));
+    const endOfWeekDate = addWeeks(startOfWeekDate, 1);
+
+    console.log("Weekly range:", { startOfWeek: startOfWeekDate, endOfWeek: endOfWeekDate });
+
+    const transactionsForWeek = transactions.filter(
+      (t) => t.date >= startOfWeekDate && t.date < endOfWeekDate
+    );
+
+    console.log("Transactions for the week:", transactionsForWeek);
+    setTransactionDialog({ isOpen: true, transactions: transactionsForWeek });
+  };
 
   return (
     <div style={styles.container}>
@@ -546,6 +616,7 @@ const App = () => {
                 ],
               }}
               options={{
+                onClick: (event, context) => handleAccountWeeklyPointClick(context),
                 plugins: {
                   tooltip: {
                     callbacks: {
@@ -580,6 +651,7 @@ const App = () => {
                 ],
               }}
               options={{
+                onClick: (event, context) => handleMonthlyBarClick(context),
                 responsive: true,
                 plugins: {
                   legend: {
@@ -693,7 +765,7 @@ const App = () => {
 
       {transactionDialog.isOpen && (
         <div style={styles.modalOverlay}>
-          <div style={styles.modalContent}></div>
+          <div style={styles.modalContent}>
             <h3>Transactions</h3>
             <div style={styles.transactionTableContainer}>
               <table style={styles.transactionTable}>
