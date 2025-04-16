@@ -1,0 +1,15 @@
+{
+  "files": {
+    "main.css": "/finance-helper/static/css/main.6cbf3c29.css",
+    "main.js": "/finance-helper/static/js/main.53396602.js",
+    "static/media/index.cjs": "/finance-helper/static/media/index.a02930182e698c6507fb.cjs",
+    "static/media/en-US.cjs": "/finance-helper/static/media/en-US.c3a6319ea4f219498e6f.cjs",
+    "index.html": "/finance-helper/index.html",
+    "main.6cbf3c29.css.map": "/finance-helper/static/css/main.6cbf3c29.css.map",
+    "main.53396602.js.map": "/finance-helper/static/js/main.53396602.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.6cbf3c29.css",
+    "static/js/main.53396602.js"
+  ]
+}
