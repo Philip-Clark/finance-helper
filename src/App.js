@@ -6,97 +6,166 @@ import Papa from "papaparse";
 import { DateRangePicker } from "react-date-range";
 import "react-date-range/dist/styles.css"; // Main style file
 import "react-date-range/dist/theme/default.css"; // Theme CSS file
-import { addWeeks, startOfWeek, format } from "date-fns"; // Import date-fns for date manipulation
+import { addWeeks, startOfWeek } from "date-fns"; // Import date-fns for date manipulation
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend, TimeScale);
 
-
 const styles = {
   container: {
-    fontFamily: "Arial, sans-serif",
-    padding: "0px",
-    textAlign: "center",
-    height: "100vh",
+    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif",
+    padding: "24px",
+    minHeight: "100vh",
     display: "flex",
     flexDirection: "column",
-    justifyContent: "space-between",
+    backgroundColor: "#f5f5f7",
+    color: "#1d1d1f",
   },
-  headerNav: {
+  header: {
+    marginBottom: "32px",
+  },
+  greeting: {
+    fontSize: "32px",
+    fontWeight: "600",
+    marginBottom: "8px",
+    color: "#1d1d1f",
+  },
+  subtitle: {
+    fontSize: "24px",
+    fontWeight: "400",
+    marginBottom: "16px",
+    color: "#6e6e73",
+  },
+  description: {
+    fontSize: "16px",
+    color: "#86868b",
+    marginBottom: "32px",
+  },
+  quickActions: {
     display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: "10px 20px",
-    backgroundColor: "#f9f9f9",
+    gap: "16px",
+    marginBottom: "32px",
+    flexWrap: "wrap",
+  },
+  actionCard: {
+    backgroundColor: "white",
+    padding: "16px",
     borderRadius: "12px",
-    marginBottom: "20px",
+    border: "1px solid #e5e5e7",
+    cursor: "pointer",
+    transition: "all 0.2s ease",
+    minWidth: "200px",
+    textAlign: "left",
+    boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+    "&:hover": {
+      transform: "translateY(-2px)",
+      boxShadow: "0 4px 16px rgba(0,0,0,0.1)",
+    },
   },
-  navSection: {
-    display: "flex",
-    alignItems: "center",
-    gap: "10px",
+  actionTitle: {
+    fontSize: "14px",
+    fontWeight: "500",
+    color: "#1d1d1f",
+    marginBottom: "4px",
   },
-  centeredNavSection: {
+  actionIcon: {
+    fontSize: "24px",
+    marginBottom: "8px",
+  },
+  mainContent: {
     display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-    gap: "10px",
+    gap: "24px",
     flex: 1,
   },
-  uploadButton: {
-    padding: "10px 20px",
-    borderRadius: "8px",
-    backgroundColor: "#007bff",
-    color: "#fff",
-    border: "none",
-    cursor: "pointer",
-    transition: "transform 0.2s, box-shadow 0.2s",
-    ":hover": {
-      transform: "scale(1.1) rotate(2deg)",
-      boxShadow: "0 6px 12px rgba(0, 0, 0, 0.2)",
-    },
-    ":active": {
-      transform: "scale(0.95) rotate(-2deg)",
-      boxShadow: "0 2px 4px rgba(0, 0, 0, 0.2)",
-    },
-  },
-  button: (isActive) => ({
-    padding: "10px 20px",
-    borderRadius: "8px",
-    backgroundColor: isActive ? "#007bff" : "#f1f1f1",
-    color: isActive ? "#fff" : "#000",
-    border: "none",
-    cursor: "pointer",
-    transition: "transform 0.2s, box-shadow 0.2s",
-    ":hover": {
-      transform: "scale(1.1) rotate(2deg)",
-      boxShadow: "0 6px 12px rgba(0, 0, 0, 0.2)",
-    },
-    ":active": {
-      transform: "scale(0.95) rotate(-2deg)",
-      boxShadow: "0 2px 4px rgba(0, 0, 0, 0.2)",
-    },
-  }),
-  chartContainer: {
+  leftPanel: {
+    flex: 2,
     display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
     flexDirection: "column",
-    gap: "20px",
+    gap: "24px",
+  },
+  rightPanel: {
     flex: 1,
+    backgroundColor: "white",
+    borderRadius: "16px",
+    padding: "24px",
+    border: "1px solid #e5e5e7",
+    boxShadow: "0 4px 16px rgba(0,0,0,0.05)",
+    maxHeight: "600px",
+    overflowY: "auto",
   },
   chartCard: {
-    width: "80%",
-    backgroundColor: "#fff",
-    padding: "20px",
-    borderRadius: "12px",
-    boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
-    transition: "transform 0.2s, box-shadow 0.2s",
-    "&:hover": {
-      transform: "scale(1.02)",
-      boxShadow: "0 6px 12px rgba(0, 0, 0, 0.2)",
+    backgroundColor: "white",
+    padding: "24px",
+    borderRadius: "16px",
+    border: "1px solid #e5e5e7",
+    boxShadow: "0 4px 16px rgba(0,0,0,0.05)",
+  },
+  chartTitle: {
+    fontSize: "20px",
+    fontWeight: "600",
+    marginBottom: "16px",
+    color: "#1d1d1f",
+  },
+  input: {
+    width: "100%",
+    padding: "12px 16px",
+    borderRadius: "8px",
+    border: "1px solid #e5e5e7",
+    backgroundColor: "#f9f9f9",
+    fontSize: "16px",
+    fontFamily: "inherit",
+    outline: "none",
+    transition: "border-color 0.2s ease",
+    "&:focus": {
+      borderColor: "#007aff",
+      backgroundColor: "white",
     },
   },
-  modalOverlay: {
+  button: (variant = "primary") => ({
+    padding: "12px 24px",
+    borderRadius: "8px",
+    border: "none",
+    cursor: "pointer",
+    fontSize: "16px",
+    fontWeight: "500",
+    transition: "all 0.2s ease",
+    backgroundColor: variant === "primary" ? "#007aff" : "#f2f2f7",
+    color: variant === "primary" ? "white" : "#1d1d1f",
+    "&:hover": {
+      transform: "scale(1.02)",
+      backgroundColor: variant === "primary" ? "#0056cc" : "#e5e5ea",
+    },
+    "&:active": {
+      transform: "scale(0.98)",
+    },
+  }),
+  expenseList: {
+    marginTop: "16px",
+  },
+  expenseItem: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: "12px",
+    borderRadius: "8px",
+    backgroundColor: "#f9f9f9",
+    marginBottom: "8px",
+    border: "1px solid #e5e5e7",
+  },
+  expenseColor: {
+    width: "16px",
+    height: "16px",
+    borderRadius: "50%",
+    marginRight: "12px",
+  },
+  deleteButton: {
+    padding: "4px 8px",
+    borderRadius: "4px",
+    border: "none",
+    backgroundColor: "#ff3b30",
+    color: "white",
+    cursor: "pointer",
+    fontSize: "12px",
+  },  modalOverlay: {
     position: "fixed",
     top: 0,
     left: 0,
@@ -109,10 +178,10 @@ const styles = {
     zIndex: 1000,
   },
   modalContent: {
-    backgroundColor: "#fff",
+    backgroundColor: "white",
     padding: "30px",
-    borderRadius: "12px",
-    boxShadow: "0 6px 12px rgba(0, 0, 0, 0.2)",
+    borderRadius: "16px",
+    boxShadow: "0 10px 30px rgba(0,0,0,0.2)",
     width: "90%",
     maxWidth: "800px",
     textAlign: "center",
@@ -123,27 +192,27 @@ const styles = {
     marginTop: "20px",
   },
   modalButton: {
-    padding: "10px 20px",
+    padding: "12px 24px",
     borderRadius: "8px",
     border: "none",
     cursor: "pointer",
-    transition: "transform 0.2s, box-shadow 0.2s",
-    ":hover": {
-      transform: "scale(1.05)",
-      boxShadow: "0 4px 8px rgba(0, 0, 0, 0.2)",
+    fontSize: "16px",
+    fontWeight: "500",
+    transition: "all 0.2s ease",
+    "&:hover": {
+      transform: "scale(1.02)",
     },
-    ":active": {
-      transform: "scale(0.95)",
-      boxShadow: "0 2px 4px rgba(0, 0, 0, 0.2)",
+    "&:active": {
+      transform: "scale(0.98)",
     },
   },
   filterButton: {
-    backgroundColor: "#007bff",
-    color: "#fff",
+    backgroundColor: "#007aff",
+    color: "white",
   },
   cancelButton: {
-    backgroundColor: "#ccc",
-    color: "#000",
+    backgroundColor: "#f2f2f7",
+    color: "#1d1d1f",
   },
   transactionTable: {
     width: "100%",
@@ -152,44 +221,44 @@ const styles = {
   },
   transactionHeader: {
     backgroundColor: "#f9f9f9",
-    fontWeight: "bold",
+    fontWeight: "600",
     textAlign: "left",
-    borderBottom: "2px solid #ddd",
+    borderBottom: "2px solid #e5e5e7",
   },
   transactionRow: {
-    borderBottom: "1px solid #ddd",
-    paddingBottom: "10px", // Add spacing between rows
+    borderBottom: "1px solid #e5e5e7",
+    paddingBottom: "10px",
   },
   transactionCell: {
-    padding: "10px",
+    padding: "12px",
     textAlign: "left",
   },
   positiveAmount: {
-    color: "green",
-    fontWeight: "bold",
+    color: "#34c759",
+    fontWeight: "600",
   },
   negativeAmount: {
-    color: "red",
-    fontWeight: "bold",
+    color: "#ff3b30",
+    fontWeight: "600",
   },
   transactionDescription: {
-    color: "#888", // Lighter color for descriptions
-    fontSize: "0.9em", // Smaller font size
+    color: "#6e6e73",
+    fontSize: "14px",
   },
   summaryRow: {
-    fontWeight: "bold",
-    backgroundColor: "#f1f1f1",
-    borderTop: "2px solid #ddd",
+    fontWeight: "600",
+    backgroundColor: "#f9f9f9",
+    borderTop: "2px solid #e5e5e7",
   },
   closeButtonContainer: {
-    marginTop: "20px", // Add space above the close button
+    marginTop: "20px",
   },
   transactionTableContainer: {
-    maxHeight: "300px", // Limit the height of the table
-    overflowY: "auto", // Enable vertical scrolling
+    maxHeight: "300px",
+    overflowY: "auto",
     marginTop: "20px",
-    border: "1px solid #ddd", // Add a border around the scrollable area
-    borderRadius: "8px",
+    border: "1px solid #e5e5e7",
+    borderRadius: "12px",
   },
 };
 
@@ -198,9 +267,16 @@ const App = () => {
   const [filteredData, setFilteredData] = useState([]);
   const [dateRange, setDateRange] = useState({ start: "", end: "" });
   const [activeTab, setActiveTab] = useState("line");
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [transactionDialog, setTransactionDialog] = useState({ isOpen: false, transactions: [] });
-  const [uploadType, setUploadType] = useState("account"); // New state for upload type
+  const [isModalOpen, setIsModalOpen] = useState(false);  const [transactionDialog, setTransactionDialog] = useState({ isOpen: false, transactions: [] });
+  const [additionalExpenses, setAdditionalExpenses] = useState([]);
+  const [newExpenseName, setNewExpenseName] = useState("");
+  const [newExpenseAmount, setNewExpenseAmount] = useState("");
+
+  // Color palette for additional expenses
+  const expenseColors = [
+    "#ff6b6b", "#4ecdc4", "#45b7d1", "#96ceb4", "#feca57",
+    "#ff9ff3", "#54a0ff", "#5f27cd", "#00d2d3", "#ff9f43"
+  ];
 
   const parseCSV = (file) => {
     Papa.parse(file, {
@@ -212,7 +288,7 @@ const App = () => {
           debit: parseFloat(row.Debit || 0),
           credit: parseFloat(row.Credit || 0),
           balance: parseFloat(row.Balance || 0),
-          description: row.Description || "N/A", // Include the description field
+          description: row.Description || "N/A",
         }));
         setTransactions(data);
         setFilteredData(data);
@@ -234,39 +310,13 @@ const App = () => {
   const calculateDailyData = () => {
     const dailyData = {};
     filteredData.forEach((transaction) => {
-      const day = transaction.date.toISOString().split("T")[0]; // Format as YYYY-MM-DD
+      const day = transaction.date.toISOString().split("T")[0];
       if (!dailyData[day]) {
         dailyData[day] = { balance: transaction.balance, transactions: [] };
       }
       dailyData[day].transactions.push(transaction);
     });
     return dailyData;
-  };
-
-  const calculateWeeklyData = () => {
-    const weeklyData = {};
-    let currentWeekStart = startOfWeek(new Date(filteredData[0]?.date || new Date()));
-
-    filteredData.forEach((transaction) => {
-      const transactionWeekStart = startOfWeek(transaction.date);
-      while (currentWeekStart < transactionWeekStart) {
-        // Fill missing weeks with the previous week's balance
-        const previousWeekBalance = weeklyData[format(currentWeekStart, "yyyy-MM-dd")]?.balance || 0;
-        currentWeekStart = addWeeks(currentWeekStart, 1);
-        weeklyData[format(currentWeekStart, "yyyy-MM-dd")] = { balance: previousWeekBalance };
-      }
-      weeklyData[format(transactionWeekStart, "yyyy-MM-dd")] = { balance: transaction.balance };
-    });
-
-    // Fill any remaining weeks up to the current date
-    const today = new Date();
-    while (currentWeekStart < today) {
-      const previousWeekBalance = weeklyData[format(currentWeekStart, "yyyy-MM-dd")]?.balance || 0;
-      currentWeekStart = addWeeks(currentWeekStart, 1);
-      weeklyData[format(currentWeekStart, "yyyy-MM-dd")] = { balance: previousWeekBalance };
-    }
-
-    return weeklyData;
   };
 
   const calculateMonthlyRatios = () => {
@@ -282,174 +332,61 @@ const App = () => {
     return monthlyRatios;
   };
 
-  const calculateWeeklyCardData = () => {
-    const weeklyData = {};
-    filteredData.forEach((transaction) => {
-      const weekStart = startOfWeek(transaction.date);
-      const weekKey = format(weekStart, "yyyy-MM-dd");
-      if (!weeklyData[weekKey]) {
-        weeklyData[weekKey] = { expenses: 0, payments: 0 };
-      }
-      weeklyData[weekKey].expenses += transaction.debit || 0;
-      weeklyData[weekKey].payments += transaction.credit || 0;
-    });
-    return weeklyData;
+  const handleFileUpload = (file) => {
+    parseCSV(file);
   };
 
-  const handleFileUpload = (file) => {
-    if (uploadType === "account") {
-      parseCSV(file); // Handle account data as before
-    } else if (uploadType === "card") {
-      parseCSV(file); // Handle card data (processed differently in charts)
+  const addExpense = () => {
+    if (newExpenseName && newExpenseAmount) {
+      const expense = {
+        id: Date.now(),
+        name: newExpenseName,
+        amount: parseFloat(newExpenseAmount),
+        color: expenseColors[additionalExpenses.length % expenseColors.length]
+      };
+      setAdditionalExpenses([...additionalExpenses, expense]);
+      setNewExpenseName("");
+      setNewExpenseAmount("");
     }
   };
 
-  const calculateScatterData = () => {
-    return filteredData.map((transaction) => ({
-      x: transaction.date,
-      y: transaction.debit > 0 ? transaction.debit : -transaction.credit, // Reverse the logic
-    }));
+  const removeExpense = (id) => {
+    setAdditionalExpenses(additionalExpenses.filter(exp => exp.id !== id));
   };
 
-  const scatterData = calculateScatterData();
-
-  const dailyData = calculateDailyData();
-  const dailyDates = Object.keys(dailyData).sort(); // Ensure chronological order
+  const dailyData = calculateDailyData();  const dailyDates = Object.keys(dailyData).sort((a, b) => a.localeCompare(b));
   const dailyBalances = dailyDates.map((date) => dailyData[date].balance);
 
-  const weeklyData = calculateWeeklyData();
-  const weeklyDates = Object.keys(weeklyData).sort(); // Ensure chronological order
-  const weeklyBalances = weeklyDates.map((date) => weeklyData[date].balance);
-
   const monthlyRatios = calculateMonthlyRatios();
-  const ratioMonths = Object.keys(monthlyRatios).sort(); // Ensure chronological order
+  const ratioMonths = Object.keys(monthlyRatios).sort((a, b) => a.localeCompare(b));
   const monthlyIncomes = ratioMonths.map((month) => monthlyRatios[month].income);
   const monthlyExpenses = ratioMonths.map((month) => monthlyRatios[month].expense);
 
-  const weeklyCardData = calculateWeeklyCardData();
-  const weeklyCardDates = Object.keys(weeklyCardData).sort(); // Ensure chronological order
-  const weeklyCardExpenses = weeklyCardDates.map((date) => weeklyCardData[date].expenses);
-  const weeklyCardPayments = weeklyCardDates.map((date) => weeklyCardData[date].payments);
-
-  const isDateFilterApplied = dateRange.start && dateRange.end;
-
-  const handlePointClick = (context, type) => {
-    if (!context.length) {
-      console.log("No data point was clicked.");
-      return; // Ensure a data point was clicked
-    }
-    const index = context[0].index;
-  
-    if (type === "weekly") {
-      const label = dailyDates[index]; // Use dailyDates to get the correct date label
-      const startOfWeekDate = startOfWeek(new Date(label));
-      if (isNaN(startOfWeekDate.getTime())) {
-        console.error("Invalid date parsed for weekly data:", label);
-        return;
+  // Create datasets for the bar chart including additional expenses
+  const createBarChartDatasets = () => {
+    const datasets = [
+      {
+        label: "Income",
+        data: monthlyIncomes,
+        backgroundColor: "#34c759",
+      },
+      {
+        label: "Base Expenses",
+        data: monthlyExpenses,
+        backgroundColor: "#ff3b30",
       }
-      const endOfWeekDate = addWeeks(startOfWeekDate, 1);
-      console.log("Weekly range:", { startOfWeek: startOfWeekDate, endOfWeek: endOfWeekDate });
-      const transactionsForWeek = transactions.filter(
-        (t) => t.date >= startOfWeekDate && t.date < endOfWeekDate
-      );
-      console.log("Transactions for the week:", transactionsForWeek);
-      setTransactionDialog({ isOpen: true, transactions: transactionsForWeek });
-    } else if (type === "monthly") {
-      const datasetIndex = context[0].datasetIndex; // Determine if it's income or expense
-      const monthLabel = ratioMonths[index]; // Use the index to get the correct month label
-      const [year, month] = monthLabel.split("-");
-      console.log("Monthly range:", { year, month });
-  
-      const transactionsForMonth = transactions.filter((t) => {
-        const transactionYear = t.date.getFullYear();
-        const transactionMonth = t.date.getMonth() + 1; // Months are 0-indexed
-        return transactionYear === parseInt(year) && transactionMonth === parseInt(month);
+    ];
+
+    // Add additional expenses as stacked bars
+    additionalExpenses.forEach((expense) => {
+      datasets.push({
+        label: expense.name,
+        data: ratioMonths.map(() => expense.amount),
+        backgroundColor: expense.color,
       });
-  
-      if (datasetIndex === 0) {
-        // Income dataset
-        const incomeTransactions = transactionsForMonth.filter((t) => t.credit > 0);
-        console.log("Income transactions for the month:", incomeTransactions);
-        setTransactionDialog({ isOpen: true, transactions: incomeTransactions });
-      } else if (datasetIndex === 1) {
-        // Expense dataset
-        const expenseTransactions = transactionsForMonth.filter((t) => t.debit > 0);
-        console.log("Expense transactions for the month:", expenseTransactions);
-        setTransactionDialog({ isOpen: true, transactions: expenseTransactions });
-      }
-    }
-  };
-  
-  const handleCardPointClick = (context) => {
-    if (!context.length) {
-      console.log("No data point was clicked.");
-      return; // Ensure a data point was clicked
-    }
-    const index = context[0].index;
-    const label = weeklyCardDates[index]; // Use weeklyCardDates to get the correct date label
-    const startOfWeekDate = startOfWeek(new Date(label));
-    if (isNaN(startOfWeekDate.getTime())) {
-      console.error("Invalid date parsed for card cumulative data:", label);
-      return;
-    }
-    const endOfWeekDate = addWeeks(startOfWeekDate, 1);
-    console.log("Weekly range:", { startOfWeek: startOfWeekDate, endOfWeek: endOfWeekDate });
-    const transactionsForWeek = transactions.filter(
-      (t) => t.date >= startOfWeekDate && t.date < endOfWeekDate
-    );
-    console.log("Transactions for the week:", transactionsForWeek);
-    setTransactionDialog({ isOpen: true, transactions: transactionsForWeek });
-  };
+    });
 
-  const handleScatterPointClick = (context) => {
-    if (!context.length) {
-      console.log("No data point was clicked.");
-      return; // Ensure a data point was clicked
-    }
-    const index = context[0].index;
-    const transaction = scatterData[index]; // Get the clicked transaction
-    console.log("Clicked transaction:", transaction);
-
-    const startOfDay = new Date(transaction.x);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(transaction.x);
-    endOfDay.setHours(23, 59, 59, 999);
-
-    const transactionsForDay = transactions.filter(
-      (t) => t.date >= startOfDay && t.date <= endOfDay
-    );
-    console.log("Transactions for the day:", transactionsForDay);
-    setTransactionDialog({ isOpen: true, transactions: transactionsForDay });
-  };
-
-  const handleAccountPointClick = (context) => {
-    if (!context.length) {
-      console.log("No data point was clicked.");
-      return; // Ensure a data point was clicked
-    }
-    const index = context[0].index;
-    const label = dailyDates[index]; // Use dailyDates to get the correct date label
-    const startOfDay = new Date(label);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(label);
-    endOfDay.setHours(23, 59, 59, 999);
-
-    const transactionsForDay = transactions.filter(
-      (t) => t.date >= startOfDay && t.date <= endOfDay
-    );
-    console.log("Transactions for the day:", transactionsForDay);
-    setTransactionDialog({ isOpen: true, transactions: transactionsForDay });
-  };
-
-  const calculateSummary = (transactions) => {
-    const totalAmount = transactions.reduce(
-      (sum, t) => sum + (t.debit > 0 ? -t.debit : t.credit),
-      0
-    );
-    return {
-      totalAmount,
-      count: transactions.length,
-    };
+    return datasets;
   };
 
   const handleDateRangeChange = (ranges) => {
@@ -457,129 +394,79 @@ const App = () => {
     setDateRange({ start: startDate, end: endDate });
   };
 
-  const calculateCardExpenses = () => {
-    let cumulativeDebt = 0;
-    return weeklyCardDates.map((date) => {
-      cumulativeDebt += weeklyCardExpenses[weeklyCardDates.indexOf(date)];
-      cumulativeDebt -= weeklyCardPayments[weeklyCardDates.indexOf(date)];
-      return cumulativeDebt;
-    });
-  };
-
-  const cardExpensesData = calculateCardExpenses();
-
   const handleMonthlyBarClick = (context) => {
-    if (!context.length) {
-      console.log("No data point was clicked.");
-      return; // Ensure a data point was clicked
-    }
+    if (!context.length) return;
     const index = context[0].index;
-    const datasetIndex = context[0].datasetIndex; // Determine if it's income or expense
-    const monthLabel = ratioMonths[index]; // Use the index to get the correct month label
+    const datasetIndex = context[0].datasetIndex;
+    const monthLabel = ratioMonths[index];
     const [year, month] = monthLabel.split("-");
-
-    console.log("Monthly range:", { year, month });
 
     const transactionsForMonth = transactions.filter((t) => {
       const transactionYear = t.date.getFullYear();
-      const transactionMonth = t.date.getMonth() + 1; // Months are 0-indexed
+      const transactionMonth = t.date.getMonth() + 1;
       return transactionYear === parseInt(year) && transactionMonth === parseInt(month);
     });
 
     if (datasetIndex === 0) {
-      // Income dataset
       const incomeTransactions = transactionsForMonth.filter((t) => t.credit > 0);
-      console.log("Income transactions for the month:", incomeTransactions);
       setTransactionDialog({ isOpen: true, transactions: incomeTransactions });
     } else if (datasetIndex === 1) {
-      // Expense dataset
       const expenseTransactions = transactionsForMonth.filter((t) => t.debit > 0);
-      console.log("Expense transactions for the month:", expenseTransactions);
       setTransactionDialog({ isOpen: true, transactions: expenseTransactions });
     }
   };
 
   const handleAccountWeeklyPointClick = (context) => {
-    if (!context.length) {
-      console.log("No data point was clicked.");
-      return; // Ensure a data point was clicked
-    }
+    if (!context.length) return;
     const index = context[0].index;
-    const label = dailyDates[index]; // Use dailyDates to get the correct date label
+    const label = dailyDates[index];
     const startOfWeekDate = startOfWeek(new Date(label));
     const endOfWeekDate = addWeeks(startOfWeekDate, 1);
-
-    console.log("Weekly range:", { startOfWeek: startOfWeekDate, endOfWeek: endOfWeekDate });
 
     const transactionsForWeek = transactions.filter(
       (t) => t.date >= startOfWeekDate && t.date < endOfWeekDate
     );
-
-    console.log("Transactions for the week:", transactionsForWeek);
     setTransactionDialog({ isOpen: true, transactions: transactionsForWeek });
   };
 
   return (
     <div style={styles.container}>
-      <div style={styles.headerNav}>
-        {/* Left Section: Filter */}
-        <div style={styles.navSection}>
-          <button
-            onClick={() => setIsModalOpen(true)}
-            style={styles.uploadButton}
-          >
-            Dates
-          </button>
+      {/* Header */}
+      <div style={styles.header}>
+        <div style={styles.greeting}>Hi there!</div>
+        <div style={styles.subtitle}>What would you like to know?</div>
+        <div style={styles.description}>
+          Use one of the most common prompts below or use your own to begin
         </div>
+      </div>
 
-        {/* Middle Section: Tabs */}
-        <div style={styles.centeredNavSection}>
-          {uploadType === "account" ? (
-            <>
-              <button
-                onClick={() => setActiveTab("line")}
-                style={styles.button(activeTab === "line")}
-              >
-                Account Balance by Week
-              </button>
-              <button
-                onClick={() => setActiveTab("bar")}
-                style={styles.button(activeTab === "bar")}
-              >
-                Expense to Income
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                onClick={() => setActiveTab("cumulative")}
-                style={styles.button(activeTab === "cumulative")}
-              >
-                Card Expenses
-              </button>
-              <button
-                onClick={() => setActiveTab("scatter")}
-                style={styles.button(activeTab === "scatter")}
-              >
-                Transaction Scatter
-              </button>
-            </>
-          )}
-        </div>
-
-        {/* Right Section: Upload Data */}
-        <div style={styles.navSection}>
-          <select
-            value={uploadType}
-            onChange={(e) => setUploadType(e.target.value)}
-            style={{ padding: "10px", borderRadius: "8px", marginRight: "10px" }}
-          >
-            <option value="account">Account Data</option>
-            <option value="card">Card Data</option>
-          </select>
-          <label htmlFor="file-upload" style={styles.uploadButton}>
-            Upload Data
-          </label>
+      {/* Quick Actions */}
+      <div style={styles.quickActions}>        <button 
+          style={styles.actionCard}
+          onClick={() => setActiveTab("line")}
+        >
+          <div style={styles.actionIcon}>📊</div>
+          <div style={styles.actionTitle}>View account balance over time</div>
+        </button>
+        <button 
+          style={styles.actionCard}
+          onClick={() => setActiveTab("bar")}
+        >
+          <div style={styles.actionIcon}>💰</div>
+          <div style={styles.actionTitle}>Analyze income vs expenses monthly</div>
+        </button>
+        <button 
+          style={styles.actionCard}
+          onClick={() => setIsModalOpen(true)}
+        >
+          <div style={styles.actionIcon}>📅</div>
+          <div style={styles.actionTitle}>Filter by date range</div>
+        </button>        <label htmlFor="file-upload" style={styles.actionCard}>
+          <div style={styles.actionIcon}>📤</div>
+          <div style={styles.actionTitle}>Upload financial data</div>
+          <div style={{ marginTop: "8px", fontSize: "14px", color: "#86868b" }}>
+            Choose file
+          </div>
           <input
             id="file-upload"
             type="file"
@@ -587,183 +474,173 @@ const App = () => {
             onChange={(e) => handleFileUpload(e.target.files[0])}
             style={{ display: "none" }}
           />
-        </div>
+        </label>
       </div>
 
-      {isDateFilterApplied && (
-        <div style={{ marginBottom: "10px", fontStyle: "italic" }}>
-          Showing data from {new Date(dateRange.start).toLocaleDateString()} to{" "}
-          {new Date(dateRange.end).toLocaleDateString()}
+      {/* Main Content */}
+      <div style={styles.mainContent}>
+        {/* Left Panel - Charts */}
+        <div style={styles.leftPanel}>
+          {activeTab === "line" && (
+            <div style={styles.chartCard}>
+              <div style={styles.chartTitle}>Account Balance Over Time</div>
+              <Line
+                data={{
+                  labels: dailyDates,
+                  datasets: [
+                    {
+                      label: "Account Balance",
+                      data: dailyBalances,
+                      borderColor: "#007aff",
+                      backgroundColor: "rgba(0, 122, 255, 0.1)",
+                      fill: true,
+                      pointBackgroundColor: "#007aff",
+                      pointBorderColor: "#007aff",
+                      pointRadius: 4,
+                      tension: 0.4,
+                    },
+                  ],
+                }}
+                options={{
+                  onClick: (event, context) => handleAccountWeeklyPointClick(context),
+                  responsive: true,
+                  plugins: {
+                    legend: {
+                      display: false,
+                    },
+                    tooltip: {                      callbacks: {
+                        label: (context) =>
+                          `Balance: $${Number(context.raw).toLocaleString("en-US")}`,
+                      },
+                    },
+                  },
+                  scales: {
+                    y: {
+                      beginAtZero: false,
+                      grid: {
+                        color: "#f0f0f0",
+                      },
+                    },
+                    x: {
+                      grid: {
+                        color: "#f0f0f0",
+                      },
+                    },
+                  },
+                }}
+              />
+            </div>
+          )}
+
+          {activeTab === "bar" && (
+            <div style={styles.chartCard}>
+              <div style={styles.chartTitle}>Monthly Income vs Expenses</div>
+              <Bar
+                data={{
+                  labels: ratioMonths,
+                  datasets: createBarChartDatasets(),
+                }}
+                options={{
+                  onClick: (event, context) => handleMonthlyBarClick(context),
+                  responsive: true,
+                  scales: {
+                    x: {
+                      stacked: true,
+                    },
+                    y: {
+                      stacked: true,
+                      beginAtZero: true,
+                    },
+                  },
+                  plugins: {
+                    legend: {
+                      position: "top",
+                    },
+                    tooltip: {                      callbacks: {
+                        label: (context) =>
+                          `${context.dataset.label}: ${Number(context.raw).toLocaleString(
+                            "en-US",
+                            {
+                              style: "currency",
+                              currency: "USD",
+                            }
+                          )}`,
+                      },
+                    },
+                  },
+                }}
+              />
+            </div>
+          )}
         </div>
-      )}
 
-      <div style={styles.chartContainer}>
-        {uploadType === "account" && activeTab === "line" && (
-          <div style={styles.chartCard}>
-            <Line
-              data={{
-                labels: dailyDates,
-                datasets: [
-                  {
-                    label: "Weekly Balance",
-                    data: dailyBalances,
-                    borderColor: "blue",
-                    fill: false,
-                    pointBackgroundColor: "blue",
-                    pointBorderColor: "blue",
-                    pointRadius: 4,
-                  },
-                ],
-              }}
-              options={{
-                onClick: (event, context) => handleAccountWeeklyPointClick(context),
-                plugins: {
-                  tooltip: {
-                    callbacks: {
-                      label: (context) =>
-                        `Balance: ${context.raw.toLocaleString("en-US", {
-                          style: "currency",
-                          currency: "USD",
-                        })}`,
-                    },
-                  },
-                },
-              }}
-            />
+        {/* Right Panel - Expense Management */}
+        <div style={styles.rightPanel}>
+          <div style={styles.chartTitle}>Additional Expenses</div>
+          <div style={styles.description}>
+            Add hypothetical expenses to see how they would impact your monthly budget
           </div>
-        )}
-        {uploadType === "account" && activeTab === "bar" && (
-          <div style={styles.chartCard}>
-            <Bar
-              data={{
-                labels: ratioMonths,
-                datasets: [
-                  {
-                    label: "Income",
-                    data: monthlyIncomes,
-                    backgroundColor: "green",
-                  },
-                  {
-                    label: "Expense",
-                    data: monthlyExpenses,
-                    backgroundColor: "red",
-                  },
-                ],
-              }}
-              options={{
-                onClick: (event, context) => handleMonthlyBarClick(context),
-                responsive: true,
-                plugins: {
-                  legend: {
-                    position: "top",
-                  },
-                  tooltip: {
-                    callbacks: {
-                      label: (context) =>
-                        `${context.dataset.label}: ${context.raw.toLocaleString(
-                          "en-US",
-                          {
-                            style: "currency",
-                            currency: "USD",
-                          }
-                        )}`,
-                    },
-                  },
-                },
-              }}
+          
+          <div style={{ marginBottom: "16px" }}>
+            <input
+              type="text"
+              placeholder="Expense name"
+              value={newExpenseName}
+              onChange={(e) => setNewExpenseName(e.target.value)}
+              style={{ ...styles.input, marginBottom: "8px" }}
             />
-          </div>
-        )}
-        {uploadType === "card" && activeTab === "cumulative" && (
-          <div style={styles.chartCard}>
-            <Line
-              data={{
-                labels: weeklyCardDates,
-                datasets: [
-                  {
-                    label: "Card Expenses",
-                    data: cardExpensesData,
-                    borderColor: "red",
-                    fill: false,
-                    pointBackgroundColor: "red",
-                    pointBorderColor: "red",
-                    pointRadius: 8, // Increase dot size
-                  },
-                ],
-              }}
-              options={{
-                onClick: (event, context) => handleCardPointClick(context),
-                plugins: {
-                  tooltip: {
-                    callbacks: {
-                      label: (context) =>
-                        `Debt: ${context.raw.toLocaleString("en-US", {
-                          style: "currency",
-                          currency: "USD",
-                        })}`,
-                    },
-                  },
-                },
-              }}
+            <input
+              type="number"
+              placeholder="Monthly amount"
+              value={newExpenseAmount}
+              onChange={(e) => setNewExpenseAmount(e.target.value)}
+              style={{ ...styles.input, marginBottom: "8px" }}
             />
+            <button
+              onClick={addExpense}
+              style={styles.button("primary")}
+            >
+              Add Expense
+            </button>
           </div>
-        )}
-        {uploadType === "card" && activeTab === "scatter" && (
-          <div style={styles.chartCard}>
-            <Line
-              type="scatter"
-              data={{
-                datasets: [
-                  {
-                    label: "Transactions",
-                    data: scatterData,
-                    backgroundColor: "blue",
-                    pointRadius: 8, // Increase dot size
-                    showLine: false, // Disable lines between points
-                  },
-                ],
-              }}
-              options={{
-                onClick: (event, context) => handleScatterPointClick(context),
-                plugins: {
-                  tooltip: {
-                    callbacks: {
-                      label: (context) =>
-                        `Date: ${new Date(context.raw.x).toLocaleDateString()}, Amount: ${context.raw.y.toLocaleString(
-                          "en-US",
-                          {
-                            style: "currency",
-                            currency: "USD",
-                          }
-                        )}`,
-                    },
-                  },
-                },
-                scales: {
-                  x: {
-                    type: "time",
-                    time: {
-                      unit: "week",
-                    },
-                    title: {
-                      display: true,
-                      text: "Date",
-                    },
-                  },
-                  y: {
-                    title: {
-                      display: true,
-                      text: "Amount",
-                    },
-                  },
-                },
-              }}
-            />
-          </div>
-        )}
-      </div>
 
-      {transactionDialog.isOpen && (
+          <div style={styles.expenseList}>
+            {additionalExpenses.map((expense) => (
+              <div key={expense.id} style={styles.expenseItem}>
+                <div style={{ display: "flex", alignItems: "center" }}>
+                  <div
+                    style={{
+                      ...styles.expenseColor,
+                      backgroundColor: expense.color,
+                    }}
+                  />
+                  <div>
+                    <div style={{ fontWeight: "500" }}>{expense.name}</div>
+                    <div style={{ color: "#6e6e73", fontSize: "14px" }}>
+                      {expense.amount.toLocaleString("en-US", {
+                        style: "currency",
+                        currency: "USD",
+                      })} / month
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => removeExpense(expense.id)}
+                  style={styles.deleteButton}
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+          </div>
+
+          {additionalExpenses.length === 0 && (
+            <div style={{ textAlign: "center", color: "#6e6e73", marginTop: "32px" }}>
+              No additional expenses added yet
+            </div>
+          )}
+        </div>
+      </div>      {transactionDialog.isOpen && (
         <div style={styles.modalOverlay}>
           <div style={styles.modalContent}>
             <h3>Transactions</h3>
@@ -776,9 +653,8 @@ const App = () => {
                     <th style={{ ...styles.transactionCell, ...styles.transactionHeader }}>Amount</th>
                   </tr>
                 </thead>
-                <tbody>
-                  {transactionDialog.transactions.map((t, index) => (
-                    <tr key={index} style={styles.transactionRow}>
+                <tbody>                  {transactionDialog.transactions.map((t) => (
+                    <tr key={`${t.date.getTime()}-${t.description}`} style={styles.transactionRow}>
                       <td style={styles.transactionCell}>{t.date.toLocaleDateString()}</td>
                       <td style={{ ...styles.transactionCell, ...styles.transactionDescription }}>
                         {t.description}
