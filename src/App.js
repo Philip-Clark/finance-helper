@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Line, Bar } from "react-chartjs-2";
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend, TimeScale } from "chart.js";
 import "chartjs-adapter-date-fns"; // Import the date adapter
@@ -252,9 +252,15 @@ const styles = {
     fontWeight: "600",
     backgroundColor: "#f9f9f9",
     borderTop: "2px solid #e5e5e7",
-  },
-  closeButtonContainer: {
+  },  closeButtonContainer: {
     marginTop: "20px",
+  },
+  customCheckbox: {
+    width: "18px",
+    height: "18px",
+    cursor: "pointer",
+    accentColor: "#007aff",
+    transform: "scale(1.2)",
   },
   transactionTableContainer: {
     maxHeight: "300px",
@@ -269,17 +275,35 @@ const App = () => {
   const [transactions, setTransactions] = useState([]);
   const [filteredData, setFilteredData] = useState([]);
   const [dateRange, setDateRange] = useState({ start: "", end: "" });
-  const [activeTab, setActiveTab] = useState("line");
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState("line");  const [isModalOpen, setIsModalOpen] = useState(false);
   const [isColorSettingsOpen, setIsColorSettingsOpen] = useState(false);  const [transactionDialog, setTransactionDialog] = useState({ isOpen: false, transactions: [] });
+  const [transactionCategories, setTransactionCategories] = useState({});  const [autoCategorizeModal, setAutoCategorizeModal] = useState({ 
+    isOpen: false, 
+    targetTransaction: null, 
+    similarTransactions: [], 
+    filteredSimilarTransactions: [],
+    categoryType: '', 
+    categoryId: '', 
+    selectedTransactions: new Set(),
+    filters: {
+      dateRange: 'all', // 'all', 'before', 'after'
+      category: 'all' // 'all', 'uncategorized', 'categorized'
+    }
+  });
   const [additionalExpenses, setAdditionalExpenses] = useState([]);
   const [newExpenseName, setNewExpenseName] = useState("");
   const [newExpenseAmount, setNewExpenseAmount] = useState("");  const [additionalIncomes, setAdditionalIncomes] = useState([]);
   const [newIncomeName, setNewIncomeName] = useState("");
   const [newIncomeAmount, setNewIncomeAmount] = useState("");
-  const [colorPaletteUrl, setColorPaletteUrl] = useState("");
+  const [newIncomeCategory, setNewIncomeCategory] = useState("");  const [incomeCategories, setIncomeCategories] = useState([]);
+  const [newIncomeCategoryName, setNewIncomeCategoryName] = useState("");  const [expenseCategories, setExpenseCategories] = useState([]);
+  const [newExpenseCategoryName, setNewExpenseCategoryName] = useState("");
+  const [newExpenseCategory, setNewExpenseCategory] = useState("");
+  const [editingIncomeCategory, setEditingIncomeCategory] = useState(null);
+  const [editingExpenseCategory, setEditingExpenseCategory] = useState(null);const [colorPaletteUrl, setColorPaletteUrl] = useState("");
   const [customColors, setCustomColors] = useState([]);
-
+  const [lastSaved, setLastSaved] = useState(null);
+  const [isSaving, setIsSaving] = useState(false);
   // Default pastel color palette for both income and expenses
   const defaultPastelColors = [
     "#FFB3BA", "#FFDFBA", "#FFFFBA", "#BAFFC9", "#BAE1FF",
@@ -287,6 +311,417 @@ const App = () => {
     "#F0E68C", "#DDA0DD", "#98FB98", "#F5DEB3", "#FFE4E1",
     "#E6E6FA", "#FFF8DC", "#B0E0E6", "#FFDAB9", "#EEE8AA"
   ];
+  // Local Storage functions
+  const STORAGE_KEY = 'finance-helper-data';  const saveToLocalStorage = useCallback(() => {
+    const dataToSave = {
+      transactions,
+      additionalIncomes,
+      additionalExpenses,
+      incomeCategories,
+      expenseCategories,
+      customColors,
+      colorPaletteUrl,
+      transactionCategories,
+      savedAt: new Date().toISOString()
+    };
+    
+    try {
+      setIsSaving(true);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
+      setLastSaved(new Date());
+      console.log('Data saved to localStorage');
+      setTimeout(() => setIsSaving(false), 300); // Brief saving indicator
+    } catch (error) {
+      console.error('Error saving to localStorage:', error);
+      setIsSaving(false);
+    }
+  }, [transactions, additionalIncomes, additionalExpenses, incomeCategories, expenseCategories, customColors, colorPaletteUrl, transactionCategories]);  const clearAllData = () => {
+    if (window.confirm('Are you sure you want to clear all data? This cannot be undone.')) {
+      localStorage.removeItem(STORAGE_KEY);
+      setTransactions([]);
+      setFilteredData([]);
+      setAdditionalIncomes([]);
+      setAdditionalExpenses([]);
+      setIncomeCategories([]);
+      setExpenseCategories([]);
+      setCustomColors([]);
+      setColorPaletteUrl("");
+      setTransactionCategories({});
+      setLastSaved(null);
+      console.log('All data cleared');
+    }
+  };
+  const exportData = () => {
+    const dataToExport = {
+      transactions,
+      additionalIncomes,
+      additionalExpenses,
+      incomeCategories,
+      expenseCategories,
+      customColors,
+      colorPaletteUrl,
+      transactionCategories,
+      exportedAt: new Date().toISOString(),
+      version: "1.0"
+    };
+    
+    const blob = new Blob([JSON.stringify(dataToExport, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `finance-helper-backup-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const importData = (file) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const importedData = JSON.parse(e.target.result);
+        
+        if (!importedData.version) {
+          alert('Invalid backup file format');
+          return;
+        }
+        
+        if (window.confirm('This will replace all current data. Are you sure you want to continue?')) {
+          // Restore transactions (convert date strings back to Date objects)
+          if (importedData.transactions && Array.isArray(importedData.transactions)) {
+            const restoredTransactions = importedData.transactions.map(t => ({
+              ...t,
+              date: new Date(t.date)
+            }));
+            setTransactions(restoredTransactions);
+            setFilteredData(restoredTransactions);
+          }
+            // Restore other data
+          if (importedData.additionalIncomes) setAdditionalIncomes(importedData.additionalIncomes);
+          if (importedData.additionalExpenses) setAdditionalExpenses(importedData.additionalExpenses);
+          if (importedData.incomeCategories) setIncomeCategories(importedData.incomeCategories);
+          if (importedData.expenseCategories) setExpenseCategories(importedData.expenseCategories);
+          if (importedData.customColors) setCustomColors(importedData.customColors);
+          if (importedData.colorPaletteUrl) setColorPaletteUrl(importedData.colorPaletteUrl);
+          if (importedData.transactionCategories) setTransactionCategories(importedData.transactionCategories);
+          
+          alert('Data imported successfully!');
+        }
+      } catch (error) {
+        console.error('Import error:', error);
+        alert('Error importing data. Please check the file format.');
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const loadFromLocalStorage = () => {
+    try {
+      const savedData = localStorage.getItem(STORAGE_KEY);
+      if (savedData) {
+        const parsedData = JSON.parse(savedData);
+        
+        // Restore transactions (convert date strings back to Date objects)
+        if (parsedData.transactions && Array.isArray(parsedData.transactions)) {
+          const restoredTransactions = parsedData.transactions.map(t => ({
+            ...t,
+            date: new Date(t.date)
+          }));
+          setTransactions(restoredTransactions);
+          setFilteredData(restoredTransactions);
+        }
+        
+        // Restore additional incomes
+        if (parsedData.additionalIncomes && Array.isArray(parsedData.additionalIncomes)) {
+          setAdditionalIncomes(parsedData.additionalIncomes);
+        }
+        
+        // Restore additional expenses
+        if (parsedData.additionalExpenses && Array.isArray(parsedData.additionalExpenses)) {
+          setAdditionalExpenses(parsedData.additionalExpenses);
+        }
+        
+        // Restore income categories
+        if (parsedData.incomeCategories && Array.isArray(parsedData.incomeCategories)) {
+          setIncomeCategories(parsedData.incomeCategories);
+        }
+        
+        // Restore expense categories
+        if (parsedData.expenseCategories && Array.isArray(parsedData.expenseCategories)) {
+          setExpenseCategories(parsedData.expenseCategories);
+        }
+          // Restore custom colors
+        if (parsedData.customColors && Array.isArray(parsedData.customColors)) {
+          setCustomColors(parsedData.customColors);
+        }
+          // Restore color palette URL
+        if (parsedData.colorPaletteUrl) {
+          setColorPaletteUrl(parsedData.colorPaletteUrl);
+        }
+        
+        // Restore transaction categories
+        if (parsedData.transactionCategories) {
+          setTransactionCategories(parsedData.transactionCategories);
+        }
+        
+        // Set last saved time
+        if (parsedData.savedAt) {
+          setLastSaved(new Date(parsedData.savedAt));
+        }
+        
+        console.log('Data loaded from localStorage');
+        return true;
+      }
+    } catch (error) {
+      console.error('Error loading from localStorage:', error);
+    }
+    return false;
+  };
+  // Load data on component mount
+  useEffect(() => {
+    loadFromLocalStorage();
+  }, []);
+  
+  // Function to categorize a transaction
+  const categorizeTransaction = (transactionId, categoryType, categoryId) => {
+    setTransactionCategories(prev => ({
+      ...prev,
+      [transactionId]: { categoryType, categoryId }
+    }));
+  };
+
+  // Function to get available categories for a transaction (income or expense)
+  const getAvailableCategoriesForTransaction = (transaction) => {
+    const isIncome = transaction.credit > 0;
+    return isIncome ? incomeCategories : expenseCategories;
+  };  // Function to generate a unique transaction ID
+  const generateTransactionId = (transaction) => {
+    return `${transaction.date.getTime()}-${transaction.description}-${transaction.debit || transaction.credit}`;
+  };
+  // Function to calculate category stats (monthly average and all-time total)
+  const calculateCategoryStats = (categoryId, isIncome = false) => {
+    let totalAmount = 0;
+    let monthsWithTransactions = 0;
+    
+    ratioMonths.forEach((month) => {
+      const [year, monthNum] = month.split("-");
+      const monthTransactions = transactions.filter((t) => {
+        const transactionYear = t.date.getFullYear();
+        const transactionMonth = t.date.getMonth() + 1;
+        return transactionYear === parseInt(year) && transactionMonth === parseInt(monthNum) && 
+               (isIncome ? t.credit > 0 : t.debit > 0);
+      });
+      
+      const categoryTotal = monthTransactions.reduce((sum, t) => {
+        const transactionId = generateTransactionId(t);
+        const categoryData = transactionCategories[transactionId];
+        if (categoryData?.categoryId === categoryId.toString()) {
+          return sum + (isIncome ? t.credit : t.debit);
+        }
+        return sum;
+      }, 0);
+      
+      if (categoryTotal > 0) {
+        totalAmount += categoryTotal;
+        monthsWithTransactions += 1;
+      }
+    });
+    
+    const monthlyAverage = monthsWithTransactions > 0 ? totalAmount / monthsWithTransactions : 0;
+    
+    return {
+      total: totalAmount,
+      monthlyAverage: monthlyAverage
+    };
+  };
+
+  // Function to handle category name editing
+  const handleCategoryNameEdit = (categoryId, newName, isIncome = false) => {
+    if (!newName.trim()) return;
+    
+    if (isIncome) {
+      setIncomeCategories(incomeCategories.map(cat => 
+        cat.id === categoryId ? { ...cat, name: newName.trim() } : cat
+      ));
+      setEditingIncomeCategory(null);
+    } else {
+      setExpenseCategories(expenseCategories.map(cat => 
+        cat.id === categoryId ? { ...cat, name: newName.trim() } : cat
+      ));
+      setEditingExpenseCategory(null);
+    }
+  };  // Function to find transactions by first word of description
+  const findTransactionsByFirstWord = (targetTransaction) => {
+    const targetDesc = targetTransaction.description.toLowerCase().trim();
+    const firstWord = targetDesc.split(' ')[0];
+    
+    // Skip if first word is too short or common
+    if (firstWord.length < 3 || ['the', 'and', 'for', 'with', 'from', 'to'].includes(firstWord)) {
+      return [];
+    }
+    
+    return transactions.filter(t => {
+      const desc = t.description.toLowerCase().trim();
+      const transactionFirstWord = desc.split(' ')[0];
+      return transactionFirstWord === firstWord && t !== targetTransaction;
+    });
+  };  // Function to filter similar transactions based on modal filters
+  const applyFiltersToSimilarTransactions = (transactions, targetTransaction, filters) => {
+    const { dateRange, category } = filters;
+    const targetDate = targetTransaction.date;
+    
+    let filtered = [...transactions];
+    
+    // Apply date filter
+    if (dateRange === 'before') {
+      filtered = filtered.filter(t => t.date < targetDate);
+    } else if (dateRange === 'after') {
+      filtered = filtered.filter(t => t.date > targetDate);
+    }
+    
+    // Apply category filter
+    if (category === 'uncategorized') {
+      filtered = filtered.filter(t => {
+        const transactionId = generateTransactionId(t);
+        return !transactionCategories[transactionId];
+      });
+    } else if (category === 'categorized') {
+      filtered = filtered.filter(t => {
+        const transactionId = generateTransactionId(t);
+        return !!transactionCategories[transactionId];
+      });
+    }
+    
+    return filtered;
+  };
+
+  // Function to auto-categorize similar transactions
+  const autoCategorizeTransactions = (targetTransaction, categoryType, categoryId) => {
+    const similarTransactions = findTransactionsByFirstWord(targetTransaction);
+    
+    if (similarTransactions.length > 0) {
+      // Apply initial filters
+      const filteredTransactions = applyFiltersToSimilarTransactions(
+        similarTransactions, 
+        targetTransaction, 
+        { dateRange: 'all', category: 'all' }
+      );
+      
+      // Open the modal with similar transactions
+      const initialSelectedTransactions = new Set();
+      filteredTransactions.forEach(t => {
+        const transactionId = generateTransactionId(t);
+        initialSelectedTransactions.add(transactionId);
+      });
+      
+      setAutoCategorizeModal({
+        isOpen: true,
+        targetTransaction,
+        similarTransactions,
+        filteredSimilarTransactions: filteredTransactions,
+        categoryType,
+        categoryId,
+        selectedTransactions: initialSelectedTransactions,
+        filters: {
+          dateRange: 'all',
+          category: 'all'
+        }
+      });
+      
+      return true; // Indicate that we're handling this with the modal
+    }
+    return false;
+  };
+
+  // Function to update filters in auto-categorization modal
+  const updateAutoCategorizeFilters = (newFilters) => {
+    const { targetTransaction, similarTransactions } = autoCategorizeModal;
+    const filteredTransactions = applyFiltersToSimilarTransactions(
+      similarTransactions, 
+      targetTransaction, 
+      newFilters
+    );
+    
+    // Update selected transactions to only include those that pass the filter
+    const newSelectedTransactions = new Set();
+    filteredTransactions.forEach(t => {
+      const transactionId = generateTransactionId(t);
+      if (autoCategorizeModal.selectedTransactions.has(transactionId)) {
+        newSelectedTransactions.add(transactionId);
+      }
+    });
+    
+    setAutoCategorizeModal(prev => ({
+      ...prev,
+      filteredSimilarTransactions: filteredTransactions,
+      selectedTransactions: newSelectedTransactions,
+      filters: newFilters
+    }));
+  };
+
+  // Function to apply categorization to selected transactions from modal
+  const applyAutoCategorization = () => {
+    const { selectedTransactions, categoryType, categoryId, targetTransaction } = autoCategorizeModal;
+    
+    const newCategories = { ...transactionCategories };
+    
+    // Always categorize the target transaction
+    const targetTransactionId = generateTransactionId(targetTransaction);
+    newCategories[targetTransactionId] = { categoryType, categoryId };
+    
+    // Only categorize selected similar transactions if any are selected
+    if (selectedTransactions.size > 0) {
+      selectedTransactions.forEach(transactionId => {
+        newCategories[transactionId] = { categoryType, categoryId };
+      });
+    }
+    
+    setTransactionCategories(newCategories);
+    closeAutoCategorizeModal();
+  };
+
+  // Function to skip auto-categorization (only categorize target transaction)
+  const skipAutoCategorization = () => {
+    const { categoryType, categoryId, targetTransaction } = autoCategorizeModal;
+    
+    const newCategories = { ...transactionCategories };
+    
+    // Only categorize the target transaction
+    const targetTransactionId = generateTransactionId(targetTransaction);
+    newCategories[targetTransactionId] = { categoryType, categoryId };
+    
+    setTransactionCategories(newCategories);
+    closeAutoCategorizeModal();
+  };
+  // Function to close auto-categorization modal
+  const closeAutoCategorizeModal = () => {
+    setAutoCategorizeModal({ 
+      isOpen: false, 
+      targetTransaction: null, 
+      similarTransactions: [], 
+      filteredSimilarTransactions: [],
+      categoryType: '', 
+      categoryId: '', 
+      selectedTransactions: new Set(),
+      filters: {
+        dateRange: 'all',
+        category: 'all'
+      }
+    });
+  };// Save data whenever important state changes
+  useEffect(() => {
+    // Don't save immediately on mount, wait for user interactions
+    if (transactions.length > 0 || additionalIncomes.length > 0 || additionalExpenses.length > 0 || 
+        incomeCategories.length > 0 || expenseCategories.length > 0 || customColors.length > 0 ||
+        Object.keys(transactionCategories).length > 0) {
+      const timeoutId = setTimeout(() => {
+        saveToLocalStorage();
+      }, 500); // Debounce saves to avoid excessive writes
+      
+      return () => clearTimeout(timeoutId);
+    }
+  }, [transactions, additionalIncomes, additionalExpenses, incomeCategories, expenseCategories, customColors, colorPaletteUrl, transactionCategories, saveToLocalStorage]);
 
   // Get current color palette (custom or default)
   const getCurrentColorPalette = () => {
@@ -325,8 +760,7 @@ const App = () => {
       console.error("Error parsing Coolors URL:", error);
       return [];
     }
-  };
-  // Function to apply Coolors palette
+  };  // Function to apply Coolors palette
   const applyColorPalette = () => {
     if (!colorPaletteUrl.trim()) {
       setCustomColors([]);
@@ -345,10 +779,20 @@ const App = () => {
         ...income,
         color: colors[(itemStartIndex + index) % colors.length]
       })));
+
+      setIncomeCategories(prev => prev.map((category, index) => ({
+        ...category,
+        color: colors[(itemStartIndex + additionalIncomes.length + index) % colors.length]
+      })));
       
       setAdditionalExpenses(prev => prev.map((expense, index) => ({
         ...expense,
-        color: colors[(itemStartIndex + additionalIncomes.length + index) % colors.length]
+        color: colors[(itemStartIndex + additionalIncomes.length + incomeCategories.length + index) % colors.length]
+      })));
+
+      setExpenseCategories(prev => prev.map((category, index) => ({
+        ...category,
+        color: colors[(itemStartIndex + additionalIncomes.length + incomeCategories.length + additionalExpenses.length + index) % colors.length]
       })));
     }
   };
@@ -420,11 +864,13 @@ const App = () => {
         id: Date.now(),
         name: newExpenseName,
         amount: parseFloat(newExpenseAmount),
+        category: newExpenseCategory || null,
         color: currentPalette[colorIndex]
       };
       setAdditionalExpenses([...additionalExpenses, expense]);
       setNewExpenseName("");
       setNewExpenseAmount("");
+      setNewExpenseCategory("");
     }
   };
 
@@ -441,15 +887,84 @@ const App = () => {
         id: Date.now(),
         name: newIncomeName,
         amount: parseFloat(newIncomeAmount),
+        category: newIncomeCategory || null,
         color: currentPalette[colorIndex]
       };
       setAdditionalIncomes([...additionalIncomes, income]);
       setNewIncomeName("");
       setNewIncomeAmount("");
+      setNewIncomeCategory("");
+    }
+  };const removeIncome = (id) => {
+    setAdditionalIncomes(additionalIncomes.filter(inc => inc.id !== id));
+  };
+  const addIncomeCategory = () => {
+    if (newIncomeCategoryName) {
+      const currentPalette = getCurrentColorPalette();
+      const colorIndex = incomeCategories.length % currentPalette.length;
+      
+      const category = {
+        id: Date.now(),
+        name: newIncomeCategoryName,
+        color: currentPalette[colorIndex]
+      };
+      setIncomeCategories([...incomeCategories, category]);
+      setNewIncomeCategoryName("");
     }
   };
-  const removeIncome = (id) => {
-    setAdditionalIncomes(additionalIncomes.filter(inc => inc.id !== id));
+  const removeIncomeCategory = (id) => {
+    // Remove the category
+    setIncomeCategories(incomeCategories.filter(cat => cat.id !== id));
+    
+    // Remove category assignments from additional income items
+    setAdditionalIncomes(additionalIncomes.map(income => 
+      income.category === id.toString() ? { ...income, category: null } : income
+    ));
+    
+    // Remove category assignments from transactions
+    setTransactionCategories(prev => {
+      const newCategories = { ...prev };
+      Object.keys(newCategories).forEach(transactionId => {
+        if (newCategories[transactionId].categoryId === id.toString()) {
+          delete newCategories[transactionId];
+        }
+      });
+      return newCategories;
+    });
+  };
+  const addExpenseCategory = () => {
+    if (newExpenseCategoryName) {
+      const currentPalette = getCurrentColorPalette();
+      const colorIndex = expenseCategories.length % currentPalette.length;
+      
+      const category = {
+        id: Date.now(),
+        name: newExpenseCategoryName,
+        color: currentPalette[colorIndex]
+      };
+      setExpenseCategories([...expenseCategories, category]);
+      setNewExpenseCategoryName("");
+    }
+  };
+  const removeExpenseCategory = (id) => {
+    // Remove the category
+    setExpenseCategories(expenseCategories.filter(cat => cat.id !== id));
+    
+    // Remove category assignments from additional expense items
+    setAdditionalExpenses(additionalExpenses.map(expense => 
+      expense.category === id.toString() ? { ...expense, category: null } : expense
+    ));
+    
+    // Remove category assignments from transactions
+    setTransactionCategories(prev => {
+      const newCategories = { ...prev };
+      Object.keys(newCategories).forEach(transactionId => {
+        if (newCategories[transactionId].categoryId === id.toString()) {
+          delete newCategories[transactionId];
+        }
+      });
+      return newCategories;
+    });
   };
   const cycleIncomeColor = (id) => {
     setAdditionalIncomes(additionalIncomes.map(income => {
@@ -462,7 +977,6 @@ const App = () => {
       return income;
     }));
   };
-
   const cycleExpenseColor = (id) => {
     setAdditionalExpenses(additionalExpenses.map(expense => {
       if (expense.id === id) {
@@ -475,11 +989,33 @@ const App = () => {
     }));
   };
 
+  const cycleIncomeCategoryColor = (id) => {
+    setIncomeCategories(incomeCategories.map(category => {
+      if (category.id === id) {
+        const currentPalette = getCurrentColorPalette();
+        const currentIndex = currentPalette.indexOf(category.color);
+        const nextIndex = (currentIndex + 1) % currentPalette.length;
+        return { ...category, color: currentPalette[nextIndex] };
+      }
+      return category;
+    }));
+  };
+
+  const cycleExpenseCategoryColor = (id) => {
+    setExpenseCategories(expenseCategories.map(category => {
+      if (category.id === id) {
+        const currentPalette = getCurrentColorPalette();
+        const currentIndex = currentPalette.indexOf(category.color);
+        const nextIndex = (currentIndex + 1) % currentPalette.length;
+        return { ...category, color: currentPalette[nextIndex] };
+      }
+      return category;
+    }));
+  };
+
   const dailyData = calculateDailyData();  const dailyDates = Object.keys(dailyData).sort((a, b) => a.localeCompare(b));
   const dailyBalances = dailyDates.map((date) => dailyData[date].balance);  const monthlyRatios = calculateMonthlyRatios();
-  const ratioMonths = Object.keys(monthlyRatios).sort((a, b) => a.localeCompare(b));
-
-  // Calculate average leftover per month
+  const ratioMonths = Object.keys(monthlyRatios).sort((a, b) => a.localeCompare(b));  // Calculate average leftover per month
   const calculateAverageLeftover = () => {
     if (ratioMonths.length === 0) return 0;
     
@@ -492,15 +1028,33 @@ const App = () => {
     }, 0);
     
     return totalLeftover / ratioMonths.length;
-  };  // Create datasets for the bar chart showing actual income vs expenses side by side
+  };// Create datasets for the bar chart showing actual income vs expenses side by side
   const createBarChartDatasets = () => {
     const datasets = [];
-    const currentPalette = getCurrentColorPalette();
-
-    // Bank Income - Use first color from palette or default green
-    const bankIncomeData = ratioMonths.map((month) => monthlyRatios[month].income);
+    const currentPalette = getCurrentColorPalette();    // Bank Income - Use first color from palette or default green (excluding categorized transactions)
+    const bankIncomeData = ratioMonths.map((month) => {
+      const [year, monthNum] = month.split("-");
+      const monthTransactions = transactions.filter((t) => {
+        const transactionYear = t.date.getFullYear();
+        const transactionMonth = t.date.getMonth() + 1;
+        return transactionYear === parseInt(year) && transactionMonth === parseInt(monthNum) && t.credit > 0;
+      });
+      
+      // Calculate uncategorized income for this month
+      const uncategorizedIncome = monthTransactions.reduce((sum, t) => {
+        const transactionId = generateTransactionId(t);
+        const categoryData = transactionCategories[transactionId];
+        // Only count if not categorized
+        if (!categoryData) {
+          return sum + t.credit;
+        }
+        return sum;
+      }, 0);
+      
+      return uncategorizedIncome;
+    });
     datasets.push({
-      label: 'Bank Income',
+      label: 'Bank Income (Uncategorized)',
       data: bankIncomeData,
       backgroundColor: customColors.length > 0 ? currentPalette[0] : '#34c759',
       borderColor: 'white',
@@ -511,18 +1065,110 @@ const App = () => {
     // Individual Additional Incomes - Each with their own color (stacked on top of bank income)
     additionalIncomes.forEach((income) => {
       const incomeData = ratioMonths.map(() => income.amount);
+      const categoryName = income.category ? 
+        incomeCategories.find(cat => cat.id.toString() === income.category)?.name : null;
+      
       datasets.push({
-        label: income.name,
+        label: categoryName ? `${income.name} (${categoryName})` : income.name,
         data: incomeData,
         backgroundColor: income.color,
         borderColor: 'white',
         borderWidth: 2,
         stack: 'income',
       });
-    });    // Bank Expenses - Use second color from palette or default red
-    const bankExpenseData = ratioMonths.map((month) => monthlyRatios[month].expense);
+    });    // Helper function to calculate total income for a category across all months
+    const calculateIncomeCategoryTotal = (category) => {
+      return ratioMonths.reduce((total, month) => {
+        const [year, monthNum] = month.split("-");
+        const monthTransactions = transactions.filter((t) => {
+          const transactionYear = t.date.getFullYear();
+          const transactionMonth = t.date.getMonth() + 1;
+          return transactionYear === parseInt(year) && transactionMonth === parseInt(monthNum) && t.credit > 0;
+        });
+        
+        const categoryTotal = monthTransactions.reduce((sum, t) => {
+          const transactionId = generateTransactionId(t);
+          const categoryData = transactionCategories[transactionId];
+          if (categoryData?.categoryId === category.id.toString()) {
+            return sum + t.credit;
+          }
+          return sum;
+        }, 0);
+        
+        return total + categoryTotal;
+      }, 0);
+    };
+
+    // Sort income categories by total amount (highest first)
+    const sortedIncomeCategories = [...incomeCategories].sort((a, b) => {
+      const totalA = calculateIncomeCategoryTotal(a);
+      const totalB = calculateIncomeCategoryTotal(b);
+      return totalB - totalA;
+    });
+
+    // Categorized Bank Income Transactions - Group by category (sorted by total amount)
+    sortedIncomeCategories.forEach((category) => {
+      const categoryTotal = calculateIncomeCategoryTotal(category);
+      
+      // Only show categories that have transactions
+      if (categoryTotal > 0) {
+        const categoryIncomeData = ratioMonths.map((month) => {
+          const [year, monthNum] = month.split("-");
+          const monthTransactions = transactions.filter((t) => {
+            const transactionYear = t.date.getFullYear();
+            const transactionMonth = t.date.getMonth() + 1;
+            return transactionYear === parseInt(year) && transactionMonth === parseInt(monthNum) && t.credit > 0;
+          });
+          
+          // Sum up transactions categorized to this category
+          const categoryMonthTotal = monthTransactions.reduce((sum, t) => {
+            const transactionId = generateTransactionId(t);
+            const categoryData = transactionCategories[transactionId];
+            if (categoryData?.categoryId === category.id.toString()) {
+              return sum + t.credit;
+            }
+            return sum;
+          }, 0);
+          
+          return categoryMonthTotal;
+        });
+        
+        datasets.push({
+          label: `${category.name} (${categoryTotal.toLocaleString("en-US", {
+            style: "currency",
+            currency: "USD",
+          })} total)`,
+          data: categoryIncomeData,
+          backgroundColor: category.color,
+          borderColor: 'white',
+          borderWidth: 2,
+          stack: 'income',
+        });
+      }
+    });// Bank Expenses - Use second color from palette or default red (excluding categorized transactions)
+    const bankExpenseData = ratioMonths.map((month) => {
+      const [year, monthNum] = month.split("-");
+      const monthTransactions = transactions.filter((t) => {
+        const transactionYear = t.date.getFullYear();
+        const transactionMonth = t.date.getMonth() + 1;
+        return transactionYear === parseInt(year) && transactionMonth === parseInt(monthNum) && t.debit > 0;
+      });
+      
+      // Calculate uncategorized expenses for this month
+      const uncategorizedExpenses = monthTransactions.reduce((sum, t) => {
+        const transactionId = generateTransactionId(t);
+        const categoryData = transactionCategories[transactionId];
+        // Only count if not categorized
+        if (!categoryData) {
+          return sum + t.debit;
+        }
+        return sum;
+      }, 0);
+      
+      return uncategorizedExpenses;
+    });
     datasets.push({
-      label: 'Bank Expenses',
+      label: 'Bank Expenses (Uncategorized)',
       data: bankExpenseData,
       backgroundColor: customColors.length > 1 ? currentPalette[1] : '#ff3b30',
       borderColor: 'white',
@@ -533,14 +1179,86 @@ const App = () => {
     // Individual Additional Expenses - Each with their own color (stacked on top of bank expenses)
     additionalExpenses.forEach((expense) => {
       const expenseData = ratioMonths.map(() => expense.amount);
+      const categoryName = expense.category ? 
+        expenseCategories.find(cat => cat.id.toString() === expense.category)?.name : null;
+      
       datasets.push({
-        label: expense.name,
+        label: categoryName ? `${expense.name} (${categoryName})` : expense.name,
         data: expenseData,
         backgroundColor: expense.color,
         borderColor: 'white',
         borderWidth: 2,
         stack: 'expenses',
       });
+    });    // Helper function to calculate total expense for a category across all months
+    const calculateCategoryTotal = (category) => {
+      return ratioMonths.reduce((total, month) => {
+        const [year, monthNum] = month.split("-");
+        const monthTransactions = transactions.filter((t) => {
+          const transactionYear = t.date.getFullYear();
+          const transactionMonth = t.date.getMonth() + 1;
+          return transactionYear === parseInt(year) && transactionMonth === parseInt(monthNum) && t.debit > 0;
+        });
+        
+        const categoryTotal = monthTransactions.reduce((sum, t) => {
+          const transactionId = generateTransactionId(t);
+          const categoryData = transactionCategories[transactionId];
+          if (categoryData?.categoryId === category.id.toString()) {
+            return sum + t.debit;
+          }
+          return sum;
+        }, 0);
+        
+        return total + categoryTotal;
+      }, 0);
+    };
+
+    // Sort expense categories by total cost (highest first)
+    const sortedExpenseCategories = [...expenseCategories].sort((a, b) => {
+      const totalA = calculateCategoryTotal(a);
+      const totalB = calculateCategoryTotal(b);
+      return totalB - totalA;
+    });
+
+    // Categorized Bank Expense Transactions - Group by category (sorted by total cost)
+    sortedExpenseCategories.forEach((category) => {
+      const categoryTotal = calculateCategoryTotal(category);
+      
+      // Only show categories that have transactions
+      if (categoryTotal > 0) {
+        const categoryExpenseData = ratioMonths.map((month) => {
+          const [year, monthNum] = month.split("-");
+          const monthTransactions = transactions.filter((t) => {
+            const transactionYear = t.date.getFullYear();
+            const transactionMonth = t.date.getMonth() + 1;
+            return transactionYear === parseInt(year) && transactionMonth === parseInt(monthNum) && t.debit > 0;
+          });
+          
+          // Sum up transactions categorized to this category
+          const categoryMonthTotal = monthTransactions.reduce((sum, t) => {
+            const transactionId = generateTransactionId(t);
+            const categoryData = transactionCategories[transactionId];
+            if (categoryData?.categoryId === category.id.toString()) {
+              return sum + t.debit;
+            }
+            return sum;
+          }, 0);
+          
+          return categoryMonthTotal;
+        });
+        
+        datasets.push({
+          label: `${category.name} (${categoryTotal.toLocaleString("en-US", {
+            style: "currency",
+            currency: "USD",
+          })} total)`,
+          data: categoryExpenseData,
+          backgroundColor: category.color,
+          borderColor: 'white',
+          borderWidth: 2,
+          stack: 'expenses',
+        });
+      }
     });
 
     return datasets;
@@ -562,15 +1280,15 @@ const App = () => {
       return transactionYear === parseInt(year) && transactionMonth === parseInt(month);
     });
 
-    // Check if it's an income dataset (Bank Income or any Additional Income)
-    const totalIncomeDatasets = 1 + additionalIncomes.length; // Bank Income + Additional Incomes
+    // Calculate the total number of income datasets (Bank Income + Additional Incomes + Income Categories with transactions)
+    const totalIncomeDatasets = 1 + additionalIncomes.length + incomeCategories.length;
     
     if (datasetIndex < totalIncomeDatasets) {
-      // Income clicked (either bank or additional)
+      // Income clicked (bank, additional, or categorized transactions)
       const incomeTransactions = transactionsForMonth.filter((t) => t.credit > 0);
       setTransactionDialog({ isOpen: true, transactions: incomeTransactions });
     } else {
-      // Expenses clicked (either bank or additional)
+      // Expenses clicked (bank, additional, or categorized transactions)
       const expenseTransactions = transactionsForMonth.filter((t) => t.debit > 0);
       setTransactionDialog({ isOpen: true, transactions: expenseTransactions });
     }
@@ -591,8 +1309,7 @@ const App = () => {
 
   return (
     <div style={styles.container}>      {/* Header */}
-      <div style={styles.header}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+      <div style={styles.header}>        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <div>
             <div style={styles.greeting}>Hi there!</div>
             <div style={styles.subtitle}>What would you like to know?</div>
@@ -600,25 +1317,116 @@ const App = () => {
               Use one of the most common prompts below or use your own to begin
             </div>
           </div>
-          <button
-            onClick={() => setIsColorSettingsOpen(true)}
-            style={{
-              ...styles.button("secondary"),
-              backgroundColor: "white",
-              border: "1px solid #e5e5e7",
-              borderRadius: "8px",
-              padding: "8px 12px",
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              fontSize: "14px",
-              marginTop: "8px",
-              boxShadow: "0 2px 4px rgba(0,0,0,0.1)"
-            }}
-            title="Color Settings"
-          >
-            ⚙️ Colors
-          </button>
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px", alignItems: "flex-end" }}>
+            <button
+              onClick={() => setIsColorSettingsOpen(true)}
+              style={{
+                ...styles.button("secondary"),
+                backgroundColor: "white",
+                border: "1px solid #e5e5e7",
+                borderRadius: "8px",
+                padding: "8px 12px",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                fontSize: "14px",
+                boxShadow: "0 2px 4px rgba(0,0,0,0.1)"
+              }}
+              title="Color Settings"
+            >
+              ⚙️ Colors
+            </button>
+              {/* Data Management */}
+            <div style={{ 
+              backgroundColor: "white", 
+              border: "1px solid #e5e5e7", 
+              borderRadius: "8px", 
+              padding: "12px 16px",
+              boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+              fontSize: "13px",
+              textAlign: "right",
+              minWidth: "200px"
+            }}>              <div style={{ marginBottom: "10px", color: "#1d1d1f", fontWeight: "500" }}>
+                💾 Data Management
+              </div>
+              {isSaving && (
+                <div style={{ color: "#007aff", marginBottom: "8px", fontSize: "12px" }}>
+                  💾 Saving...
+                </div>
+              )}
+              {lastSaved && !isSaving && (
+                <div style={{ color: "#34c759", marginBottom: "8px" }}>
+                  ✓ Last saved: {lastSaved.toLocaleTimeString()}
+                </div>
+              )}
+              
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <button
+                  onClick={exportData}
+                  style={{
+                    backgroundColor: "#007aff",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "6px",
+                    padding: "6px 12px",
+                    fontSize: "12px",
+                    cursor: "pointer",
+                    fontWeight: "500",
+                    transition: "all 0.2s ease"
+                  }}
+                  onMouseOver={(e) => e.target.style.backgroundColor = "#0056cc"}
+                  onMouseOut={(e) => e.target.style.backgroundColor = "#007aff"}
+                  title="Export all data as backup file"
+                >
+                  📤 Export Data
+                </button>
+                
+                <label style={{
+                  backgroundColor: "#34c759",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "6px",
+                  padding: "6px 12px",
+                  fontSize: "12px",
+                  cursor: "pointer",
+                  fontWeight: "500",
+                  transition: "all 0.2s ease",
+                  display: "inline-block"
+                }}
+                onMouseOver={(e) => e.target.style.backgroundColor = "#28a745"}
+                onMouseOut={(e) => e.target.style.backgroundColor = "#34c759"}
+                title="Import data from backup file">
+                  📥 Import Data
+                  <input
+                    type="file"
+                    accept=".json"
+                    onChange={(e) => e.target.files[0] && importData(e.target.files[0])}
+                    style={{ display: "none" }}
+                  />
+                </label>
+                
+                <button
+                  onClick={clearAllData}
+                  style={{
+                    backgroundColor: "#ff3b30",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "6px",
+                    padding: "6px 12px",
+                    fontSize: "12px",
+                    cursor: "pointer",
+                    fontWeight: "500",
+                    transition: "all 0.2s ease"
+                  }}
+                  onMouseOver={(e) => e.target.style.backgroundColor = "#d70015"}
+                  onMouseOut={(e) => e.target.style.backgroundColor = "#ff3b30"}
+                  title="Clear all saved data"
+                >
+                  🗑️ Clear All
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -777,10 +1585,9 @@ const App = () => {
             </div>
           )}
         </div>        {/* Right Panel - Income & Expense Management */}
-        <div style={styles.rightPanel}>
-          <div style={styles.chartTitle}>Additional Income & Expenses</div>
+        <div style={styles.rightPanel}>          <div style={styles.chartTitle}>Income & Expense Management</div>
           <div style={styles.description}>
-            Add hypothetical income and expenses to see how they would impact your monthly budget
+            Create categories to organize your finances, then add individual income and expense items to those categories to see how they impact your budget
           </div>
             {/* Summary Section */}
           <div style={{ 
@@ -810,9 +1617,7 @@ const App = () => {
                   })} / month
                 </div>
               </div>
-            )}
-            
-            {/* Additional income/expenses */}
+            )}              {/* Additional income/expenses */}
             {additionalIncomes.length > 0 && (
               <div style={{ color: "#34c759", fontSize: "14px", marginBottom: "4px" }}>
                 Additional Income: +{additionalIncomes.reduce((total, income) => total + income.amount, 0).toLocaleString("en-US", {
@@ -844,8 +1649,7 @@ const App = () => {
                 currency: "USD",
               })} / month            </div>
           </div>
-          
-          {/* Income Section */}
+            {/* Income Section */}
           <div style={{ marginBottom: "24px" }}>
             <h4 style={{ marginBottom: "12px", color: "#34c759" }}>Additional Income</h4>
             <div style={{ marginBottom: "16px" }}>
@@ -863,6 +1667,18 @@ const App = () => {
                 onChange={(e) => setNewIncomeAmount(e.target.value)}
                 style={{ ...styles.input, marginBottom: "8px" }}
               />
+              <select
+                value={newIncomeCategory}
+                onChange={(e) => setNewIncomeCategory(e.target.value)}
+                style={{ ...styles.input, marginBottom: "8px" }}
+              >
+                <option value="">No Category</option>
+                {incomeCategories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
               <button
                 onClick={addIncome}
                 style={{ ...styles.button("primary"), backgroundColor: "#34c759" }}
@@ -887,6 +1703,11 @@ const App = () => {
                           style: "currency",
                           currency: "USD",
                         })} / month
+                        {income.category && (
+                          <span style={{ marginLeft: "8px", fontStyle: "italic" }}>
+                            • {incomeCategories.find(cat => cat.id.toString() === income.category)?.name || "Unknown Category"}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -898,16 +1719,107 @@ const App = () => {
                   </button>
                 </div>
               ))}
-            </div>
-
-            {additionalIncomes.length === 0 && (
+            </div>{additionalIncomes.length === 0 && (
               <div style={{ textAlign: "center", color: "#6e6e73", marginTop: "16px", fontSize: "14px" }}>
                 No additional income added yet
               </div>
             )}
-          </div>
+          </div>          {/* Income Categories Section */}
+          <div style={{ marginBottom: "24px" }}>
+            <h4 style={{ marginBottom: "12px", color: "#34c759" }}>Income Categories</h4>
+            <div style={{ marginBottom: "16px" }}>
+              <input
+                type="text"
+                placeholder="Category name (e.g., 'Freelance', 'Investments')"
+                value={newIncomeCategoryName}
+                onChange={(e) => setNewIncomeCategoryName(e.target.value)}
+                style={{ ...styles.input, marginBottom: "8px" }}
+              />
+              <button
+                onClick={addIncomeCategory}
+                style={{ ...styles.button("primary"), backgroundColor: "#34c759" }}
+              >
+                Add Category
+              </button>
+            </div>            <div style={styles.expenseList}>
+              {incomeCategories.map((category) => {
+                const stats = calculateCategoryStats(category.id, true);
+                return (
+                  <div key={category.id} style={styles.expenseItem}>
+                    <div style={{ display: "flex", alignItems: "center", flex: 1 }}>
+                      <div
+                        style={{
+                          ...styles.expenseColor,
+                          backgroundColor: category.color,
+                        }}
+                        onClick={() => cycleIncomeCategoryColor(category.id)}
+                        title="Click to cycle through colors"
+                      />
+                      <div style={{ flex: 1 }}>
+                        {editingIncomeCategory === category.id ? (
+                          <input
+                            type="text"
+                            defaultValue={category.name}
+                            onBlur={(e) => handleCategoryNameEdit(category.id, e.target.value, true)}
+                            onKeyPress={(e) => {
+                              if (e.key === 'Enter') {
+                                handleCategoryNameEdit(category.id, e.target.value, true);
+                              }
+                            }}
+                            onFocus={(e) => e.target.select()}
+                            autoFocus
+                            style={{
+                              ...styles.input,
+                              fontSize: "14px",
+                              padding: "4px 8px",
+                              margin: 0,
+                              backgroundColor: "white",
+                              border: "1px solid #007aff"
+                            }}
+                          />
+                        ) : (
+                          <div
+                            style={{ fontWeight: "500", cursor: "pointer" }}
+                            onClick={() => setEditingIncomeCategory(category.id)}
+                            title="Click to edit category name"
+                          >
+                            {category.name}
+                          </div>
+                        )}
+                        <div style={{ color: "#6e6e73", fontSize: "12px", marginTop: "2px" }}>
+                          {stats.total > 0 ? (
+                            <>
+                              All-time: +{stats.total.toLocaleString("en-US", {
+                                style: "currency",
+                                currency: "USD",
+                              })} • Avg: +{stats.monthlyAverage.toLocaleString("en-US", {
+                                style: "currency",
+                                currency: "USD",
+                              })}/month
+                            </>
+                          ) : (
+                            "Category Container (No transactions yet)"
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => removeIncomeCategory(category.id)}
+                      style={styles.deleteButton}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
 
-          {/* Expenses Section */}
+            {incomeCategories.length === 0 && (
+              <div style={{ textAlign: "center", color: "#6e6e73", marginTop: "16px", fontSize: "14px" }}>
+                No income categories added yet
+              </div>
+            )}
+          </div>          {/* Expenses Section */}
           <div>
             <h4 style={{ marginBottom: "12px", color: "#ff3b30" }}>Additional Expenses</h4>
             <div style={{ marginBottom: "16px" }}>
@@ -925,6 +1837,18 @@ const App = () => {
                 onChange={(e) => setNewExpenseAmount(e.target.value)}
                 style={{ ...styles.input, marginBottom: "8px" }}
               />
+              <select
+                value={newExpenseCategory}
+                onChange={(e) => setNewExpenseCategory(e.target.value)}
+                style={{ ...styles.input, marginBottom: "8px" }}
+              >
+                <option value="">No Category</option>
+                {expenseCategories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
               <button
                 onClick={addExpense}
                 style={styles.button("primary")}
@@ -949,6 +1873,11 @@ const App = () => {
                           style: "currency",
                           currency: "USD",
                         })} / month
+                        {expense.category && (
+                          <span style={{ marginLeft: "8px", fontStyle: "italic" }}>
+                            • {expenseCategories.find(cat => cat.id.toString() === expense.category)?.name || "Unknown Category"}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -960,19 +1889,121 @@ const App = () => {
                   </button>
                 </div>
               ))}
-            </div>
-
-            {additionalExpenses.length === 0 && (
+            </div>{additionalExpenses.length === 0 && (
               <div style={{ textAlign: "center", color: "#6e6e73", marginTop: "16px", fontSize: "14px" }}>
                 No additional expenses added yet
+              </div>
+            )}
+          </div>          {/* Expense Categories Section */}
+          <div>
+            <h4 style={{ marginBottom: "12px", color: "#ff3b30" }}>Expense Categories</h4>
+            <div style={{ marginBottom: "16px" }}>
+              <input
+                type="text"
+                placeholder="Category name (e.g., 'Entertainment', 'Subscriptions')"
+                value={newExpenseCategoryName}
+                onChange={(e) => setNewExpenseCategoryName(e.target.value)}
+                style={{ ...styles.input, marginBottom: "8px" }}
+              />
+              <button
+                onClick={addExpenseCategory}
+                style={styles.button("primary")}
+              >
+                Add Category
+              </button>
+            </div>            <div style={styles.expenseList}>
+              {expenseCategories.map((category) => {
+                const stats = calculateCategoryStats(category.id, false);
+                return (
+                  <div key={category.id} style={styles.expenseItem}>
+                    <div style={{ display: "flex", alignItems: "center", flex: 1 }}>
+                      <div
+                        style={{
+                          ...styles.expenseColor,
+                          backgroundColor: category.color,
+                        }}
+                        onClick={() => cycleExpenseCategoryColor(category.id)}
+                        title="Click to cycle through colors"
+                      />
+                      <div style={{ flex: 1 }}>
+                        {editingExpenseCategory === category.id ? (
+                          <input
+                            type="text"
+                            defaultValue={category.name}
+                            onBlur={(e) => handleCategoryNameEdit(category.id, e.target.value, false)}
+                            onKeyPress={(e) => {
+                              if (e.key === 'Enter') {
+                                handleCategoryNameEdit(category.id, e.target.value, false);
+                              }
+                            }}
+                            onFocus={(e) => e.target.select()}
+                            autoFocus
+                            style={{
+                              ...styles.input,
+                              fontSize: "14px",
+                              padding: "4px 8px",
+                              margin: 0,
+                              backgroundColor: "white",
+                              border: "1px solid #007aff"
+                            }}
+                          />
+                        ) : (
+                          <div
+                            style={{ fontWeight: "500", cursor: "pointer" }}
+                            onClick={() => setEditingExpenseCategory(category.id)}
+                            title="Click to edit category name"
+                          >
+                            {category.name}
+                          </div>
+                        )}
+                        <div style={{ color: "#6e6e73", fontSize: "12px", marginTop: "2px" }}>
+                          {stats.total > 0 ? (
+                            <>
+                              All-time: -{stats.total.toLocaleString("en-US", {
+                                style: "currency",
+                                currency: "USD",
+                              })} • Avg: -{stats.monthlyAverage.toLocaleString("en-US", {
+                                style: "currency",
+                                currency: "USD",
+                              })}/month
+                            </>
+                          ) : (
+                            "Category Container (No transactions yet)"
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => removeExpenseCategory(category.id)}
+                      style={styles.deleteButton}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+
+            {expenseCategories.length === 0 && (
+              <div style={{ textAlign: "center", color: "#6e6e73", marginTop: "16px", fontSize: "14px" }}>
+                No expense categories added yet
               </div>
             )}
           </div>
         </div>
       </div>      {transactionDialog.isOpen && (
         <div style={styles.modalOverlay}>
-          <div style={styles.modalContent}>
-            <h3>Transactions</h3>
+          <div style={{...styles.modalContent, maxWidth: "1000px"}}>
+            <h3>Transaction Categorization</h3>
+            <div style={{ 
+              fontSize: "14px", 
+              color: "#6e6e73", 
+              marginBottom: "20px",
+              textAlign: "center"
+            }}>
+              Categorize your transactions to better organize your finances. Select a category for each transaction.
+            </div>
+            
             <div style={styles.transactionTableContainer}>
               <table style={styles.transactionTable}>
                 <thead>
@@ -980,41 +2011,423 @@ const App = () => {
                     <th style={{ ...styles.transactionCell, ...styles.transactionHeader }}>Date</th>
                     <th style={{ ...styles.transactionCell, ...styles.transactionHeader }}>Description</th>
                     <th style={{ ...styles.transactionCell, ...styles.transactionHeader }}>Amount</th>
+                    <th style={{ ...styles.transactionCell, ...styles.transactionHeader }}>Category</th>
                   </tr>
                 </thead>
-                <tbody>                  {transactionDialog.transactions.map((t) => (
-                    <tr key={`${t.date.getTime()}-${t.description}`} style={styles.transactionRow}>
-                      <td style={styles.transactionCell}>{t.date.toLocaleDateString()}</td>
-                      <td style={{ ...styles.transactionCell, ...styles.transactionDescription }}>
-                        {t.description}
-                      </td>
-                      <td
-                        style={{
-                          ...styles.transactionCell,
-                          ...(t.debit > 0 ? styles.negativeAmount : styles.positiveAmount),
-                        }}
-                      >
-                        {t.debit > 0
-                          ? `-${t.debit.toLocaleString("en-US", {
-                              style: "currency",
-                              currency: "USD",
-                            })}`
-                          : t.credit.toLocaleString("en-US", {
-                              style: "currency",
-                              currency: "USD",
+                <tbody>                  {transactionDialog.transactions.map((t) => {
+                    const transactionId = generateTransactionId(t);
+                    const isIncome = t.credit > 0;
+                    const availableCategories = getAvailableCategoriesForTransaction(t);
+                    const currentCategory = transactionCategories[transactionId];
+                    
+                    return (
+                      <tr key={transactionId} style={styles.transactionRow}>
+                        <td style={styles.transactionCell}>{t.date.toLocaleDateString()}</td>
+                        <td style={{ ...styles.transactionCell, ...styles.transactionDescription }}>
+                          {t.description}
+                        </td>
+                        <td
+                          style={{
+                            ...styles.transactionCell,
+                            ...(t.debit > 0 ? styles.negativeAmount : styles.positiveAmount),
+                          }}
+                        >
+                          {t.debit > 0
+                            ? `-${t.debit.toLocaleString("en-US", {
+                                style: "currency",
+                                currency: "USD",
+                              })}`
+                            : `+${t.credit.toLocaleString("en-US", {
+                                style: "currency",
+                                currency: "USD",
+                              })}`}
+                        </td>                        <td style={styles.transactionCell}>
+                          <select
+                            value={currentCategory?.categoryId || ""}
+                            onChange={(e) => {
+                              const categoryId = e.target.value;
+                              if (categoryId) {
+                                // Check for auto-categorization first
+                                const autoApplied = autoCategorizeTransactions(t, isIncome ? 'income' : 'expense', categoryId);
+                                
+                                // If not auto-applied, apply to just this transaction
+                                if (!autoApplied) {
+                                  categorizeTransaction(transactionId, isIncome ? 'income' : 'expense', categoryId);
+                                }
+                              } else {
+                                // Remove categorization
+                                setTransactionCategories(prev => {
+                                  const newCategories = { ...prev };
+                                  delete newCategories[transactionId];
+                                  return newCategories;
+                                });
+                              }
+                            }}                            style={{
+                              ...styles.input,
+                              fontSize: "12px",
+                              padding: "6px 8px",
+                              backgroundColor: currentCategory ? "#f9f9f9" : "#fff5f5",
+                              border: currentCategory ? "1px solid #e5e5e7" : "1px solid #ff8a80",
+                              borderRadius: "4px"
+                            }}
+                          >                            <option value="">No Category</option>
+                            {availableCategories.map((category) => {
+                              return (
+                                <option 
+                                  key={category.id} 
+                                  value={category.id}
+                                >
+                                  {category.name}
+                                </option>
+                              );
                             })}
-                      </td>
-                    </tr>
-                  ))}
+                          </select>
+                          {currentCategory && (
+                            <div style={{
+                              fontSize: "10px",
+                              color: isIncome ? "#34c759" : "#ff3b30",
+                              marginTop: "2px",
+                              fontWeight: "500"
+                            }}>
+                              {isIncome ? "Income" : "Expense"} Category
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
+            
+            {/* Category Summary */}
+            <div style={{
+              marginTop: "20px",
+              backgroundColor: "#f9f9f9",
+              padding: "16px",
+              borderRadius: "12px",
+              border: "1px solid #e5e5e7"
+            }}>
+              <div style={{ fontSize: "16px", fontWeight: "600", marginBottom: "12px", color: "#1d1d1f" }}>
+                Categorization Summary
+              </div>
+              <div style={{ display: "flex", gap: "24px", flexWrap: "wrap" }}>                {/* Income Categories */}
+                {incomeCategories.length > 0 && (
+                  <div style={{ flex: 1, minWidth: "200px" }}>
+                    <div style={{ fontSize: "14px", fontWeight: "500", color: "#34c759", marginBottom: "8px" }}>
+                      Income Categories (sorted by total):
+                    </div>
+                    {incomeCategories
+                      .map(category => {
+                        const categorizedTransactions = transactionDialog.transactions.filter(t => {
+                          const transactionId = generateTransactionId(t);
+                          const categoryData = transactionCategories[transactionId];
+                          return categoryData?.categoryId === category.id.toString() && t.credit > 0;
+                        });
+                        
+                        const totalAmount = categorizedTransactions.reduce((sum, t) => sum + t.credit, 0);
+                        return { ...category, totalAmount, transactionCount: categorizedTransactions.length };
+                      })
+                      .filter(category => category.transactionCount > 0)
+                      .sort((a, b) => b.totalAmount - a.totalAmount)
+                      .map(category => (
+                        <div key={category.id} style={{ fontSize: "12px", color: "#6e6e73", marginBottom: "4px" }}>
+                          <span style={{ color: category.color, fontWeight: "bold" }}>●</span> {category.name}: {category.transactionCount} transactions (+{category.totalAmount.toLocaleString("en-US", {
+                            style: "currency",
+                            currency: "USD",
+                          })})
+                        </div>
+                      ))}
+                  </div>
+                )}
+                
+                {/* Expense Categories */}
+                {expenseCategories.length > 0 && (
+                  <div style={{ flex: 1, minWidth: "200px" }}>
+                    <div style={{ fontSize: "14px", fontWeight: "500", color: "#ff3b30", marginBottom: "8px" }}>
+                      Expense Categories (sorted by total):
+                    </div>
+                    {expenseCategories
+                      .map(category => {
+                        const categorizedTransactions = transactionDialog.transactions.filter(t => {
+                          const transactionId = generateTransactionId(t);
+                          const categoryData = transactionCategories[transactionId];
+                          return categoryData?.categoryId === category.id.toString() && t.debit > 0;
+                        });
+                        
+                        const totalAmount = categorizedTransactions.reduce((sum, t) => sum + t.debit, 0);
+                        return { ...category, totalAmount, transactionCount: categorizedTransactions.length };
+                      })
+                      .filter(category => category.transactionCount > 0)
+                      .sort((a, b) => b.totalAmount - a.totalAmount)
+                      .map(category => (
+                        <div key={category.id} style={{ fontSize: "12px", color: "#6e6e73", marginBottom: "4px" }}>
+                          <span style={{ color: category.color, fontWeight: "bold" }}>●</span> {category.name}: {category.transactionCount} transactions (-{category.totalAmount.toLocaleString("en-US", {
+                            style: "currency",
+                            currency: "USD",
+                          })})
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </div>
+                {/* Uncategorized Summary */}
+              <div style={{ marginTop: "12px", borderTop: "1px solid #e5e5e7", paddingTop: "12px" }}>
+                {(() => {
+                  const uncategorizedTransactions = transactionDialog.transactions.filter(t => {
+                    const transactionId = generateTransactionId(t);
+                    return !transactionCategories[transactionId];
+                  });
+                  const uncategorizedIncome = uncategorizedTransactions
+                    .filter(t => t.credit > 0)
+                    .reduce((sum, t) => sum + t.credit, 0);
+                  const uncategorizedExpenses = uncategorizedTransactions
+                    .filter(t => t.debit > 0)
+                    .reduce((sum, t) => sum + t.debit, 0);
+                  
+                  return (
+                    <div>
+                      <div style={{ fontSize: "12px", color: "#86868b", marginBottom: "4px" }}>
+                        Uncategorized: {uncategorizedTransactions.length} of {transactionDialog.transactions.length} transactions
+                      </div>
+                      {uncategorizedIncome > 0 && (
+                        <div style={{ fontSize: "11px", color: "#34c759" }}>
+                          • Income: +{uncategorizedIncome.toLocaleString("en-US", {
+                            style: "currency",
+                            currency: "USD",
+                          })}
+                        </div>
+                      )}
+                      {uncategorizedExpenses > 0 && (
+                        <div style={{ fontSize: "11px", color: "#ff3b30" }}>
+                          • Expenses: -{uncategorizedExpenses.toLocaleString("en-US", {
+                            style: "currency",
+                            currency: "USD",
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+            
             <div style={styles.closeButtonContainer}>
               <button
                 onClick={() => setTransactionDialog({ isOpen: false, transactions: [] })}
                 style={{ ...styles.modalButton, ...styles.cancelButton }}
               >
                 Close
+              </button>
+            </div>
+          </div>
+        </div>      )}
+
+      {/* Auto-Categorization Modal */}
+      {autoCategorizeModal.isOpen && (
+        <div style={styles.modalOverlay}>
+          <div style={{...styles.modalContent, maxWidth: "800px"}}>
+            <h3>Auto-Categorize Similar Transactions</h3>
+            <div style={{ 
+              fontSize: "14px", 
+              color: "#6e6e73", 
+              marginBottom: "20px",
+              textAlign: "center"
+            }}>
+              Found transactions with descriptions starting with "<strong>{autoCategorizeModal.targetTransaction?.description.split(' ')[0]}</strong>". Select which transactions to categorize:
+            </div>
+              <div style={{
+              backgroundColor: "#f9f9f9",
+              padding: "16px",
+              borderRadius: "12px",
+              border: "1px solid #e5e5e7",
+              marginBottom: "20px",
+              textAlign: "left"
+            }}>
+              <div style={{ fontWeight: "600", marginBottom: "8px", color: "#1d1d1f" }}>
+                Target Transaction:
+              </div>
+              <div style={{ fontSize: "14px", color: "#6e6e73" }}>
+                {autoCategorizeModal.targetTransaction?.date.toLocaleDateString()} • {autoCategorizeModal.targetTransaction?.description} • 
+                {autoCategorizeModal.targetTransaction?.debit > 0 
+                  ? ` -$${autoCategorizeModal.targetTransaction.debit.toLocaleString("en-US")}`
+                  : ` +$${autoCategorizeModal.targetTransaction?.credit.toLocaleString("en-US")}`
+                }
+              </div>
+            </div>
+
+            {/* Filter Controls */}
+            <div style={{
+              backgroundColor: "#f0f8ff",
+              padding: "16px",
+              borderRadius: "12px",
+              border: "1px solid #b3d9ff",
+              marginBottom: "20px"
+            }}>
+              <div style={{ fontWeight: "600", color: "#1d1d1f", marginBottom: "12px", fontSize: "14px" }}>
+                Filter Similar Transactions:
+              </div>
+              <div style={{ display: "flex", gap: "16px", alignItems: "center", flexWrap: "wrap" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <label style={{ fontSize: "14px", fontWeight: "500", color: "#1d1d1f" }}>Date Range:</label>
+                  <select
+                    value={autoCategorizeModal.filters.dateRange}
+                    onChange={(e) => updateAutoCategorizeFilters({
+                      ...autoCategorizeModal.filters,
+                      dateRange: e.target.value
+                    })}
+                    style={{
+                      ...styles.input,
+                      fontSize: "12px",
+                      padding: "6px 8px",
+                      minWidth: "120px"
+                    }}
+                  >
+                    <option value="all">All Dates</option>
+                    <option value="before">Before Target</option>
+                    <option value="after">After Target</option>
+                  </select>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <label style={{ fontSize: "14px", fontWeight: "500", color: "#1d1d1f" }}>Category Status:</label>
+                  <select
+                    value={autoCategorizeModal.filters.category}
+                    onChange={(e) => updateAutoCategorizeFilters({
+                      ...autoCategorizeModal.filters,
+                      category: e.target.value
+                    })}
+                    style={{
+                      ...styles.input,
+                      fontSize: "12px",
+                      padding: "6px 8px",
+                      minWidth: "140px"
+                    }}
+                  >
+                    <option value="all">All Transactions</option>
+                    <option value="uncategorized">Uncategorized Only</option>
+                    <option value="categorized">Categorized Only</option>
+                  </select>
+                </div>
+                <div style={{ fontSize: "12px", color: "#6e6e73", fontStyle: "italic" }}>
+                  Showing {autoCategorizeModal.filteredSimilarTransactions.length} of {autoCategorizeModal.similarTransactions.length} transactions
+                </div>
+              </div>
+            </div>
+
+            <div style={styles.transactionTableContainer}>
+              <table style={styles.transactionTable}>
+                <thead>
+                  <tr>
+                    <th style={{ ...styles.transactionCell, ...styles.transactionHeader, width: "50px" }}>                      <input
+                        type="checkbox"
+                        checked={autoCategorizeModal.selectedTransactions.size === autoCategorizeModal.filteredSimilarTransactions.length && autoCategorizeModal.filteredSimilarTransactions.length > 0}
+                        onChange={(e) => {
+                          const newSelectedTransactions = new Set();
+                          if (e.target.checked) {
+                            autoCategorizeModal.filteredSimilarTransactions.forEach(t => {
+                              const transactionId = generateTransactionId(t);
+                              newSelectedTransactions.add(transactionId);
+                            });
+                          }
+                          setAutoCategorizeModal(prev => ({
+                            ...prev,
+                            selectedTransactions: newSelectedTransactions
+                          }));
+                        }}
+                        style={styles.customCheckbox}
+                      />
+                    </th>
+                    <th style={{ ...styles.transactionCell, ...styles.transactionHeader }}>Date</th>
+                    <th style={{ ...styles.transactionCell, ...styles.transactionHeader }}>Description</th>
+                    <th style={{ ...styles.transactionCell, ...styles.transactionHeader }}>Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {autoCategorizeModal.filteredSimilarTransactions.map((t) => {
+                    const transactionId = generateTransactionId(t);
+                    const isSelected = autoCategorizeModal.selectedTransactions.has(transactionId);
+                    
+                    return (
+                      <tr key={transactionId} style={styles.transactionRow}>
+                        <td style={styles.transactionCell}>                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={(e) => {
+                              const newSelectedTransactions = new Set(autoCategorizeModal.selectedTransactions);
+                              if (e.target.checked) {
+                                newSelectedTransactions.add(transactionId);
+                              } else {
+                                newSelectedTransactions.delete(transactionId);
+                              }
+                              setAutoCategorizeModal(prev => ({
+                                ...prev,
+                                selectedTransactions: newSelectedTransactions
+                              }));
+                            }}
+                            style={styles.customCheckbox}
+                          />
+                        </td>
+                        <td style={styles.transactionCell}>{t.date.toLocaleDateString()}</td>
+                        <td style={{ ...styles.transactionCell, ...styles.transactionDescription }}>
+                          {t.description}
+                        </td>
+                        <td
+                          style={{
+                            ...styles.transactionCell,
+                            ...(t.debit > 0 ? styles.negativeAmount : styles.positiveAmount),
+                          }}
+                        >
+                          {t.debit > 0
+                            ? `-${t.debit.toLocaleString("en-US", {
+                                style: "currency",
+                                currency: "USD",
+                              })}`
+                            : `+${t.credit.toLocaleString("en-US", {
+                                style: "currency",
+                                currency: "USD",
+                              })}`}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+              <div style={{ 
+              marginTop: "20px", 
+              fontSize: "14px", 
+              color: "#6e6e73",
+              textAlign: "center"
+            }}>
+              {autoCategorizeModal.selectedTransactions.size} of {autoCategorizeModal.filteredSimilarTransactions.length} filtered transactions selected
+            </div><div style={{
+                ...styles.closeButtonContainer,
+                display: "flex",
+                justifyContent: "space-between",
+                gap: "12px"
+              }}>
+              <button
+                onClick={closeAutoCategorizeModal}
+                style={{ ...styles.modalButton, ...styles.cancelButton }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={skipAutoCategorization}
+                style={{ 
+                  ...styles.modalButton, 
+                  backgroundColor: "#ff9500",
+                  color: "white"
+                }}
+              >
+                Skip (Only Categorize Target)
+              </button>
+              <button
+                onClick={applyAutoCategorization}
+                style={{ ...styles.modalButton, ...styles.filterButton }}
+                disabled={autoCategorizeModal.selectedTransactions.size === 0}
+              >
+                Apply to {autoCategorizeModal.selectedTransactions.size} Transaction{autoCategorizeModal.selectedTransactions.size !== 1 ? 's' : ''}
               </button>
             </div>
           </div>
@@ -1240,14 +2653,22 @@ const App = () => {
                   onClick={() => {
                     setCustomColors([]);
                     setColorPaletteUrl("");
-                    // Reset all additional items to use default pastel colors
+                    // Reset all additional items and categories to use default pastel colors
                     setAdditionalIncomes(prev => prev.map((income, index) => ({
                       ...income,
                       color: defaultPastelColors[index % defaultPastelColors.length]
                     })));
+                    setIncomeCategories(prev => prev.map((category, index) => ({
+                      ...category,
+                      color: defaultPastelColors[(additionalIncomes.length + index) % defaultPastelColors.length]
+                    })));
                     setAdditionalExpenses(prev => prev.map((expense, index) => ({
                       ...expense,
-                      color: defaultPastelColors[index % defaultPastelColors.length]
+                      color: defaultPastelColors[(additionalIncomes.length + incomeCategories.length + index) % defaultPastelColors.length]
+                    })));
+                    setExpenseCategories(prev => prev.map((category, index) => ({
+                      ...category,
+                      color: defaultPastelColors[(additionalIncomes.length + incomeCategories.length + additionalExpenses.length + index) % defaultPastelColors.length]
                     })));
                   }}
                   style={{
