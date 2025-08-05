@@ -150,14 +150,17 @@ const styles = {
     backgroundColor: "#f9f9f9",
     marginBottom: "8px",
     border: "1px solid #e5e5e7",
-  },
-  expenseColor: {
+  },  expenseColor: {
     width: "16px",
     height: "16px",
     borderRadius: "50%",
     marginRight: "12px",
-  },
-  deleteButton: {
+    cursor: "pointer",
+    transition: "transform 0.2s ease",
+    "&:hover": {
+      transform: "scale(1.1)",
+    },
+  },  deleteButton: {
     padding: "4px 8px",
     borderRadius: "4px",
     border: "none",
@@ -165,7 +168,7 @@ const styles = {
     color: "white",
     cursor: "pointer",
     fontSize: "12px",
-  },  modalOverlay: {
+  },modalOverlay: {
     position: "fixed",
     top: 0,
     left: 0,
@@ -267,16 +270,88 @@ const App = () => {
   const [filteredData, setFilteredData] = useState([]);
   const [dateRange, setDateRange] = useState({ start: "", end: "" });
   const [activeTab, setActiveTab] = useState("line");
-  const [isModalOpen, setIsModalOpen] = useState(false);  const [transactionDialog, setTransactionDialog] = useState({ isOpen: false, transactions: [] });
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isColorSettingsOpen, setIsColorSettingsOpen] = useState(false);  const [transactionDialog, setTransactionDialog] = useState({ isOpen: false, transactions: [] });
   const [additionalExpenses, setAdditionalExpenses] = useState([]);
   const [newExpenseName, setNewExpenseName] = useState("");
-  const [newExpenseAmount, setNewExpenseAmount] = useState("");
+  const [newExpenseAmount, setNewExpenseAmount] = useState("");  const [additionalIncomes, setAdditionalIncomes] = useState([]);
+  const [newIncomeName, setNewIncomeName] = useState("");
+  const [newIncomeAmount, setNewIncomeAmount] = useState("");
+  const [colorPaletteUrl, setColorPaletteUrl] = useState("");
+  const [customColors, setCustomColors] = useState([]);
 
-  // Color palette for additional expenses
-  const expenseColors = [
-    "#ff6b6b", "#4ecdc4", "#45b7d1", "#96ceb4", "#feca57",
-    "#ff9ff3", "#54a0ff", "#5f27cd", "#00d2d3", "#ff9f43"
+  // Default pastel color palette for both income and expenses
+  const defaultPastelColors = [
+    "#FFB3BA", "#FFDFBA", "#FFFFBA", "#BAFFC9", "#BAE1FF",
+    "#D4BAE8", "#F8D7DA", "#E2F0CB", "#B3E5FC", "#FFCCCB",
+    "#F0E68C", "#DDA0DD", "#98FB98", "#F5DEB3", "#FFE4E1",
+    "#E6E6FA", "#FFF8DC", "#B0E0E6", "#FFDAB9", "#EEE8AA"
   ];
+
+  // Get current color palette (custom or default)
+  const getCurrentColorPalette = () => {
+    return customColors.length > 0 ? customColors : defaultPastelColors;
+  };
+
+  // Function to parse Coolors URL and extract colors
+  const parseColorsUrl = (url) => {
+    try {
+      // Handle different Coolors URL formats
+      let colorString = "";
+      
+      if (url.includes("coolors.co/palette/")) {
+        colorString = url.split("coolors.co/palette/")[1];
+      } else if (url.includes("coolors.co/")) {
+        colorString = url.split("coolors.co/")[1];
+      } else {
+        return [];
+      }
+      
+      // Remove any additional parameters
+      colorString = colorString.split("?")[0].split("#")[0];
+      
+      // Split colors and convert to hex format
+      const colors = colorString.split("-").map(color => {
+        // Ensure color is 6 characters
+        const cleanColor = color.replace(/[^a-fA-F0-9]/g, "");
+        if (cleanColor.length === 6) {
+          return `#${cleanColor.toUpperCase()}`;
+        }
+        return null;
+      }).filter(color => color !== null);
+      
+      return colors;
+    } catch (error) {
+      console.error("Error parsing Coolors URL:", error);
+      return [];
+    }
+  };
+  // Function to apply Coolors palette
+  const applyColorPalette = () => {
+    if (!colorPaletteUrl.trim()) {
+      setCustomColors([]);
+      return;
+    }
+    
+    const colors = parseColorsUrl(colorPaletteUrl);
+    if (colors.length > 0) {
+      setCustomColors(colors);
+      
+      // Update existing items with new colors from the palette
+      // Skip first 2 colors which are reserved for bank income/expenses
+      const itemStartIndex = 2;
+      
+      setAdditionalIncomes(prev => prev.map((income, index) => ({
+        ...income,
+        color: colors[(itemStartIndex + index) % colors.length]
+      })));
+      
+      setAdditionalExpenses(prev => prev.map((expense, index) => ({
+        ...expense,
+        color: colors[(itemStartIndex + additionalIncomes.length + index) % colors.length]
+      })));
+    }
+  };
 
   const parseCSV = (file) => {
     Papa.parse(file, {
@@ -334,15 +409,18 @@ const App = () => {
 
   const handleFileUpload = (file) => {
     parseCSV(file);
-  };
-
-  const addExpense = () => {
+  };  const addExpense = () => {
     if (newExpenseName && newExpenseAmount) {
+      const currentPalette = getCurrentColorPalette();
+      // Skip first 2 colors if using custom palette (reserved for bank income/expenses)
+      const startIndex = customColors.length > 0 ? 2 : 0;
+      const colorIndex = (startIndex + additionalIncomes.length + additionalExpenses.length) % currentPalette.length;
+      
       const expense = {
         id: Date.now(),
         name: newExpenseName,
         amount: parseFloat(newExpenseAmount),
-        color: expenseColors[additionalExpenses.length % expenseColors.length]
+        color: currentPalette[colorIndex]
       };
       setAdditionalExpenses([...additionalExpenses, expense]);
       setNewExpenseName("");
@@ -352,37 +430,116 @@ const App = () => {
 
   const removeExpense = (id) => {
     setAdditionalExpenses(additionalExpenses.filter(exp => exp.id !== id));
+  };  const addIncome = () => {
+    if (newIncomeName && newIncomeAmount) {
+      const currentPalette = getCurrentColorPalette();
+      // Skip first 2 colors if using custom palette (reserved for bank income/expenses)
+      const startIndex = customColors.length > 0 ? 2 : 0;
+      const colorIndex = (startIndex + additionalIncomes.length) % currentPalette.length;
+      
+      const income = {
+        id: Date.now(),
+        name: newIncomeName,
+        amount: parseFloat(newIncomeAmount),
+        color: currentPalette[colorIndex]
+      };
+      setAdditionalIncomes([...additionalIncomes, income]);
+      setNewIncomeName("");
+      setNewIncomeAmount("");
+    }
+  };
+  const removeIncome = (id) => {
+    setAdditionalIncomes(additionalIncomes.filter(inc => inc.id !== id));
+  };
+  const cycleIncomeColor = (id) => {
+    setAdditionalIncomes(additionalIncomes.map(income => {
+      if (income.id === id) {
+        const currentPalette = getCurrentColorPalette();
+        const currentIndex = currentPalette.indexOf(income.color);
+        const nextIndex = (currentIndex + 1) % currentPalette.length;
+        return { ...income, color: currentPalette[nextIndex] };
+      }
+      return income;
+    }));
+  };
+
+  const cycleExpenseColor = (id) => {
+    setAdditionalExpenses(additionalExpenses.map(expense => {
+      if (expense.id === id) {
+        const currentPalette = getCurrentColorPalette();
+        const currentIndex = currentPalette.indexOf(expense.color);
+        const nextIndex = (currentIndex + 1) % currentPalette.length;
+        return { ...expense, color: currentPalette[nextIndex] };
+      }
+      return expense;
+    }));
   };
 
   const dailyData = calculateDailyData();  const dailyDates = Object.keys(dailyData).sort((a, b) => a.localeCompare(b));
-  const dailyBalances = dailyDates.map((date) => dailyData[date].balance);
-
-  const monthlyRatios = calculateMonthlyRatios();
+  const dailyBalances = dailyDates.map((date) => dailyData[date].balance);  const monthlyRatios = calculateMonthlyRatios();
   const ratioMonths = Object.keys(monthlyRatios).sort((a, b) => a.localeCompare(b));
-  const monthlyIncomes = ratioMonths.map((month) => monthlyRatios[month].income);
-  const monthlyExpenses = ratioMonths.map((month) => monthlyRatios[month].expense);
 
-  // Create datasets for the bar chart including additional expenses
+  // Calculate average leftover per month
+  const calculateAverageLeftover = () => {
+    if (ratioMonths.length === 0) return 0;
+    
+    const totalLeftover = ratioMonths.reduce((sum, month) => {
+      const monthData = monthlyRatios[month];
+      const additionalIncome = additionalIncomes.reduce((total, income) => total + income.amount, 0);
+      const additionalExpense = additionalExpenses.reduce((total, expense) => total + expense.amount, 0);
+      const leftover = (monthData.income + additionalIncome) - (monthData.expense + additionalExpense);
+      return sum + leftover;
+    }, 0);
+    
+    return totalLeftover / ratioMonths.length;
+  };  // Create datasets for the bar chart showing actual income vs expenses side by side
   const createBarChartDatasets = () => {
-    const datasets = [
-      {
-        label: "Income",
-        data: monthlyIncomes,
-        backgroundColor: "#34c759",
-      },
-      {
-        label: "Base Expenses",
-        data: monthlyExpenses,
-        backgroundColor: "#ff3b30",
-      }
-    ];
+    const datasets = [];
+    const currentPalette = getCurrentColorPalette();
 
-    // Add additional expenses as stacked bars
+    // Bank Income - Use first color from palette or default green
+    const bankIncomeData = ratioMonths.map((month) => monthlyRatios[month].income);
+    datasets.push({
+      label: 'Bank Income',
+      data: bankIncomeData,
+      backgroundColor: customColors.length > 0 ? currentPalette[0] : '#34c759',
+      borderColor: 'white',
+      borderWidth: 2,
+      stack: 'income',
+    });
+
+    // Individual Additional Incomes - Each with their own color (stacked on top of bank income)
+    additionalIncomes.forEach((income) => {
+      const incomeData = ratioMonths.map(() => income.amount);
+      datasets.push({
+        label: income.name,
+        data: incomeData,
+        backgroundColor: income.color,
+        borderColor: 'white',
+        borderWidth: 2,
+        stack: 'income',
+      });
+    });    // Bank Expenses - Use second color from palette or default red
+    const bankExpenseData = ratioMonths.map((month) => monthlyRatios[month].expense);
+    datasets.push({
+      label: 'Bank Expenses',
+      data: bankExpenseData,
+      backgroundColor: customColors.length > 1 ? currentPalette[1] : '#ff3b30',
+      borderColor: 'white',
+      borderWidth: 2,
+      stack: 'expenses',
+    });
+
+    // Individual Additional Expenses - Each with their own color (stacked on top of bank expenses)
     additionalExpenses.forEach((expense) => {
+      const expenseData = ratioMonths.map(() => expense.amount);
       datasets.push({
         label: expense.name,
-        data: ratioMonths.map(() => expense.amount),
+        data: expenseData,
         backgroundColor: expense.color,
+        borderColor: 'white',
+        borderWidth: 2,
+        stack: 'expenses',
       });
     });
 
@@ -392,9 +549,7 @@ const App = () => {
   const handleDateRangeChange = (ranges) => {
     const { startDate, endDate } = ranges.selection;
     setDateRange({ start: startDate, end: endDate });
-  };
-
-  const handleMonthlyBarClick = (context) => {
+  };  const handleMonthlyBarClick = (context) => {
     if (!context.length) return;
     const index = context[0].index;
     const datasetIndex = context[0].datasetIndex;
@@ -407,10 +562,15 @@ const App = () => {
       return transactionYear === parseInt(year) && transactionMonth === parseInt(month);
     });
 
-    if (datasetIndex === 0) {
+    // Check if it's an income dataset (Bank Income or any Additional Income)
+    const totalIncomeDatasets = 1 + additionalIncomes.length; // Bank Income + Additional Incomes
+    
+    if (datasetIndex < totalIncomeDatasets) {
+      // Income clicked (either bank or additional)
       const incomeTransactions = transactionsForMonth.filter((t) => t.credit > 0);
       setTransactionDialog({ isOpen: true, transactions: incomeTransactions });
-    } else if (datasetIndex === 1) {
+    } else {
+      // Expenses clicked (either bank or additional)
       const expenseTransactions = transactionsForMonth.filter((t) => t.debit > 0);
       setTransactionDialog({ isOpen: true, transactions: expenseTransactions });
     }
@@ -430,13 +590,35 @@ const App = () => {
   };
 
   return (
-    <div style={styles.container}>
-      {/* Header */}
+    <div style={styles.container}>      {/* Header */}
       <div style={styles.header}>
-        <div style={styles.greeting}>Hi there!</div>
-        <div style={styles.subtitle}>What would you like to know?</div>
-        <div style={styles.description}>
-          Use one of the most common prompts below or use your own to begin
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <div>
+            <div style={styles.greeting}>Hi there!</div>
+            <div style={styles.subtitle}>What would you like to know?</div>
+            <div style={styles.description}>
+              Use one of the most common prompts below or use your own to begin
+            </div>
+          </div>
+          <button
+            onClick={() => setIsColorSettingsOpen(true)}
+            style={{
+              ...styles.button("secondary"),
+              backgroundColor: "white",
+              border: "1px solid #e5e5e7",
+              borderRadius: "8px",
+              padding: "8px 12px",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              fontSize: "14px",
+              marginTop: "8px",
+              boxShadow: "0 2px 4px rgba(0,0,0,0.1)"
+            }}
+            title="Color Settings"
+          >
+            ⚙️ Colors
+          </button>
         </div>
       </div>
 
@@ -530,17 +712,30 @@ const App = () => {
                 }}
               />
             </div>
-          )}
-
-          {activeTab === "bar" && (
+          )}          {activeTab === "bar" && (
             <div style={styles.chartCard}>
               <div style={styles.chartTitle}>Monthly Income vs Expenses</div>
+              <div style={{ 
+                fontSize: "14px", 
+                color: "#6e6e73", 
+                marginBottom: "16px",
+                textAlign: "center"
+              }}>
+                Average Leftover: <span style={{ 
+                  color: calculateAverageLeftover() >= 0 ? "#34c759" : "#ff3b30",
+                  fontWeight: "600"
+                }}>
+                  {calculateAverageLeftover().toLocaleString("en-US", {
+                    style: "currency",
+                    currency: "USD",
+                  })} / month
+                </span>
+              </div>
               <Bar
                 data={{
                   labels: ratioMonths,
                   datasets: createBarChartDatasets(),
-                }}
-                options={{
+                }}                options={{
                   onClick: (event, context) => handleMonthlyBarClick(context),
                   responsive: true,
                   scales: {
@@ -550,13 +745,22 @@ const App = () => {
                     y: {
                       stacked: true,
                       beginAtZero: true,
+                      ticks: {
+                        callback: function(value) {
+                          return value.toLocaleString("en-US", {
+                            style: "currency",
+                            currency: "USD",
+                          });
+                        }
+                      }
                     },
                   },
                   plugins: {
                     legend: {
                       position: "top",
                     },
-                    tooltip: {                      callbacks: {
+                    tooltip: {
+                      callbacks: {
                         label: (context) =>
                           `${context.dataset.label}: ${Number(context.raw).toLocaleString(
                             "en-US",
@@ -572,73 +776,198 @@ const App = () => {
               />
             </div>
           )}
-        </div>
-
-        {/* Right Panel - Expense Management */}
+        </div>        {/* Right Panel - Income & Expense Management */}
         <div style={styles.rightPanel}>
-          <div style={styles.chartTitle}>Additional Expenses</div>
+          <div style={styles.chartTitle}>Additional Income & Expenses</div>
           <div style={styles.description}>
-            Add hypothetical expenses to see how they would impact your monthly budget
+            Add hypothetical income and expenses to see how they would impact your monthly budget
+          </div>
+            {/* Summary Section */}
+          <div style={{ 
+            backgroundColor: "#f9f9f9", 
+            padding: "16px", 
+            borderRadius: "8px", 
+            marginBottom: "24px",
+            border: "1px solid #e5e5e7"
+          }}>
+            <div style={{ fontSize: "16px", fontWeight: "600", marginBottom: "12px", color: "#1d1d1f" }}>
+              Monthly Financial Summary
+            </div>
+            
+            {/* Bank data summary */}
+            {filteredData.length > 0 && ratioMonths.length > 0 && (
+              <div style={{ marginBottom: "12px" }}>
+                <div style={{ color: "#34c759", fontSize: "14px", marginBottom: "4px" }}>
+                  Avg Bank Income: +{(ratioMonths.reduce((sum, month) => sum + monthlyRatios[month].income, 0) / ratioMonths.length).toLocaleString("en-US", {
+                    style: "currency",
+                    currency: "USD",
+                  })} / month
+                </div>
+                <div style={{ color: "#ff3b30", fontSize: "14px", marginBottom: "4px" }}>
+                  Avg Bank Expenses: -{(ratioMonths.reduce((sum, month) => sum + monthlyRatios[month].expense, 0) / ratioMonths.length).toLocaleString("en-US", {
+                    style: "currency",
+                    currency: "USD",
+                  })} / month
+                </div>
+              </div>
+            )}
+            
+            {/* Additional income/expenses */}
+            {additionalIncomes.length > 0 && (
+              <div style={{ color: "#34c759", fontSize: "14px", marginBottom: "4px" }}>
+                Additional Income: +{additionalIncomes.reduce((total, income) => total + income.amount, 0).toLocaleString("en-US", {
+                  style: "currency",
+                  currency: "USD",
+                })} / month
+              </div>
+            )}
+            {additionalExpenses.length > 0 && (
+              <div style={{ color: "#ff3b30", fontSize: "14px", marginBottom: "4px" }}>
+                Additional Expenses: -{additionalExpenses.reduce((total, expense) => total + expense.amount, 0).toLocaleString("en-US", {
+                  style: "currency",
+                  currency: "USD",
+                })} / month
+              </div>
+            )}
+            
+            {/* Average leftover */}
+            <div style={{ 
+              color: calculateAverageLeftover() >= 0 ? "#34c759" : "#ff3b30", 
+              fontSize: "16px", 
+              fontWeight: "600", 
+              borderTop: "1px solid #e5e5e7", 
+              paddingTop: "8px", 
+              marginTop: "8px" 
+            }}>
+              Average Leftover: {calculateAverageLeftover() >= 0 ? '+' : ''}{calculateAverageLeftover().toLocaleString("en-US", {
+                style: "currency",
+                currency: "USD",
+              })} / month            </div>
           </div>
           
-          <div style={{ marginBottom: "16px" }}>
-            <input
-              type="text"
-              placeholder="Expense name"
-              value={newExpenseName}
-              onChange={(e) => setNewExpenseName(e.target.value)}
-              style={{ ...styles.input, marginBottom: "8px" }}
-            />
-            <input
-              type="number"
-              placeholder="Monthly amount"
-              value={newExpenseAmount}
-              onChange={(e) => setNewExpenseAmount(e.target.value)}
-              style={{ ...styles.input, marginBottom: "8px" }}
-            />
-            <button
-              onClick={addExpense}
-              style={styles.button("primary")}
-            >
-              Add Expense
-            </button>
-          </div>
-
-          <div style={styles.expenseList}>
-            {additionalExpenses.map((expense) => (
-              <div key={expense.id} style={styles.expenseItem}>
-                <div style={{ display: "flex", alignItems: "center" }}>
-                  <div
-                    style={{
-                      ...styles.expenseColor,
-                      backgroundColor: expense.color,
-                    }}
-                  />
-                  <div>
-                    <div style={{ fontWeight: "500" }}>{expense.name}</div>
-                    <div style={{ color: "#6e6e73", fontSize: "14px" }}>
-                      {expense.amount.toLocaleString("en-US", {
-                        style: "currency",
-                        currency: "USD",
-                      })} / month
+          {/* Income Section */}
+          <div style={{ marginBottom: "24px" }}>
+            <h4 style={{ marginBottom: "12px", color: "#34c759" }}>Additional Income</h4>
+            <div style={{ marginBottom: "16px" }}>
+              <input
+                type="text"
+                placeholder="Income source name"
+                value={newIncomeName}
+                onChange={(e) => setNewIncomeName(e.target.value)}
+                style={{ ...styles.input, marginBottom: "8px" }}
+              />
+              <input
+                type="number"
+                placeholder="Monthly amount"
+                value={newIncomeAmount}
+                onChange={(e) => setNewIncomeAmount(e.target.value)}
+                style={{ ...styles.input, marginBottom: "8px" }}
+              />
+              <button
+                onClick={addIncome}
+                style={{ ...styles.button("primary"), backgroundColor: "#34c759" }}
+              >
+                Add Income
+              </button>
+            </div>            <div style={styles.expenseList}>
+              {additionalIncomes.map((income) => (
+                <div key={income.id} style={styles.expenseItem}>
+                  <div style={{ display: "flex", alignItems: "center" }}>
+                    <div
+                      style={{
+                        ...styles.expenseColor,
+                        backgroundColor: income.color,
+                      }}                      onClick={() => cycleIncomeColor(income.id)}
+                      title="Click to cycle through colors"
+                    />
+                    <div>
+                      <div style={{ fontWeight: "500" }}>{income.name}</div>
+                      <div style={{ color: "#6e6e73", fontSize: "14px" }}>
+                        {income.amount.toLocaleString("en-US", {
+                          style: "currency",
+                          currency: "USD",
+                        })} / month
+                      </div>
                     </div>
                   </div>
+                  <button
+                    onClick={() => removeIncome(income.id)}
+                    style={styles.deleteButton}
+                  >
+                    Remove
+                  </button>
                 </div>
-                <button
-                  onClick={() => removeExpense(expense.id)}
-                  style={styles.deleteButton}
-                >
-                  Remove
-                </button>
+              ))}
+            </div>
+
+            {additionalIncomes.length === 0 && (
+              <div style={{ textAlign: "center", color: "#6e6e73", marginTop: "16px", fontSize: "14px" }}>
+                No additional income added yet
               </div>
-            ))}
+            )}
           </div>
 
-          {additionalExpenses.length === 0 && (
-            <div style={{ textAlign: "center", color: "#6e6e73", marginTop: "32px" }}>
-              No additional expenses added yet
+          {/* Expenses Section */}
+          <div>
+            <h4 style={{ marginBottom: "12px", color: "#ff3b30" }}>Additional Expenses</h4>
+            <div style={{ marginBottom: "16px" }}>
+              <input
+                type="text"
+                placeholder="Expense name"
+                value={newExpenseName}
+                onChange={(e) => setNewExpenseName(e.target.value)}
+                style={{ ...styles.input, marginBottom: "8px" }}
+              />
+              <input
+                type="number"
+                placeholder="Monthly amount"
+                value={newExpenseAmount}
+                onChange={(e) => setNewExpenseAmount(e.target.value)}
+                style={{ ...styles.input, marginBottom: "8px" }}
+              />
+              <button
+                onClick={addExpense}
+                style={styles.button("primary")}
+              >
+                Add Expense
+              </button>
+            </div>            <div style={styles.expenseList}>
+              {additionalExpenses.map((expense) => (
+                <div key={expense.id} style={styles.expenseItem}>
+                  <div style={{ display: "flex", alignItems: "center" }}>
+                    <div
+                      style={{
+                        ...styles.expenseColor,
+                        backgroundColor: expense.color,
+                      }}                      onClick={() => cycleExpenseColor(expense.id)}
+                      title="Click to cycle through colors"
+                    />
+                    <div>
+                      <div style={{ fontWeight: "500" }}>{expense.name}</div>
+                      <div style={{ color: "#6e6e73", fontSize: "14px" }}>
+                        {expense.amount.toLocaleString("en-US", {
+                          style: "currency",
+                          currency: "USD",
+                        })} / month
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => removeExpense(expense.id)}
+                    style={styles.deleteButton}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
             </div>
-          )}
+
+            {additionalExpenses.length === 0 && (
+              <div style={{ textAlign: "center", color: "#6e6e73", marginTop: "16px", fontSize: "14px" }}>
+                No additional expenses added yet
+              </div>
+            )}
+          </div>
         </div>
       </div>      {transactionDialog.isOpen && (
         <div style={styles.modalOverlay}>
@@ -720,6 +1049,224 @@ const App = () => {
                 style={{ ...styles.modalButton, ...styles.cancelButton }}
               >
                 Cancel
+              </button>
+            </div>          </div>
+        </div>
+      )}
+
+      {/* Color Settings Modal */}
+      {isColorSettingsOpen && (
+        <div style={styles.modalOverlay}>
+          <div style={{
+            ...styles.modalContent,
+            maxWidth: "600px",
+            textAlign: "left"
+          }}>
+            <div style={{ 
+              display: "flex", 
+              justifyContent: "space-between", 
+              alignItems: "center", 
+              marginBottom: "24px",
+              borderBottom: "1px solid #e5e5e7",
+              paddingBottom: "16px"
+            }}>
+              <h2 style={{ margin: 0, color: "#1d1d1f", fontSize: "20px", fontWeight: "600" }}>
+                Color Settings
+              </h2>              <button
+                onClick={() => setIsColorSettingsOpen(false)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  fontSize: "24px",
+                  cursor: "pointer",
+                  color: "#6e6e73",
+                  padding: "4px",
+                  borderRadius: "4px",
+                  transition: "background-color 0.2s ease"
+                }}
+                onMouseOver={(e) => e.target.style.backgroundColor = "#f0f0f0"}
+                onMouseOut={(e) => e.target.style.backgroundColor = "transparent"}
+                onFocus={(e) => e.target.style.backgroundColor = "#f0f0f0"}
+                onBlur={(e) => e.target.style.backgroundColor = "transparent"}
+                aria-label="Close color settings"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ marginBottom: "24px" }}>
+              <div style={{ fontSize: "16px", fontWeight: "600", marginBottom: "12px", color: "#1d1d1f" }}>
+                Custom Color Palette
+              </div>              <div style={{ fontSize: "14px", color: "#6e6e73", marginBottom: "16px" }}>
+                Paste a Coolors URL to use custom colors for your income and expense items. The first color will be used for bank income, the second for bank expenses, and remaining colors for additional items.
+              </div>
+              
+              <div style={{ marginBottom: "16px" }}>                <label htmlFor="coolors-url-input" style={{ 
+                  display: "block", 
+                  fontSize: "14px", 
+                  fontWeight: "500", 
+                  marginBottom: "8px", 
+                  color: "#1d1d1f" 
+                }}>
+                  Coolors URL:
+                </label>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <input
+                    id="coolors-url-input"
+                    type="text"
+                    placeholder="https://coolors.co/palette/8ecae6-219ebc-023047-ffb703-fb8500"
+                    value={colorPaletteUrl}
+                    onChange={(e) => setColorPaletteUrl(e.target.value)}
+                    style={{ 
+                      ...styles.input, 
+                      flex: 1,
+                      fontSize: "14px"
+                    }}
+                  />
+                  <button
+                    onClick={applyColorPalette}
+                    style={{
+                      ...styles.button("primary"),
+                      backgroundColor: "#007aff",
+                      padding: "12px 20px",
+                      whiteSpace: "nowrap",
+                      fontSize: "14px"
+                    }}
+                  >
+                    Apply
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ 
+                backgroundColor: "#f9f9f9", 
+                padding: "16px", 
+                borderRadius: "8px",
+                border: "1px solid #e5e5e7"
+              }}>
+                <div style={{ fontSize: "14px", color: "#6e6e73", marginBottom: "8px" }}>
+                  Example URLs:
+                </div>
+                <div style={{ fontSize: "13px", color: "#86868b", fontFamily: "monospace" }}>
+                  https://coolors.co/palette/8ecae6-219ebc-023047-ffb703-fb8500<br/>
+                  https://coolors.co/264653-2a9d8f-e9c46a-f4a261-e76f51<br/>
+                  https://coolors.co/palette/f72585-b5179e-7209b7-480ca8-3a0ca3
+                </div>
+              </div>
+            </div>
+
+            {customColors.length > 0 && (
+              <div style={{ marginBottom: "24px" }}>
+                <div style={{ fontSize: "16px", fontWeight: "600", marginBottom: "12px", color: "#1d1d1f" }}>
+                  Current Palette ({customColors.length} colors)
+                </div>
+                <div style={{ 
+                  display: "flex", 
+                  gap: "8px", 
+                  flexWrap: "wrap",
+                  backgroundColor: "#f9f9f9",
+                  padding: "16px",
+                  borderRadius: "8px",
+                  border: "1px solid #e5e5e7"
+                }}>
+                  {customColors.map((color, index) => (
+                    <div
+                      key={`color-${color}-${index}`}
+                      style={{
+                        width: "32px",
+                        height: "32px",
+                        backgroundColor: color,
+                        borderRadius: "6px",
+                        border: "2px solid white",
+                        boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: "10px",
+                        color: "#666",
+                        fontWeight: "500"
+                      }}
+                      title={color}
+                    >
+                      {index + 1}
+                    </div>
+                  ))}
+                </div>
+                <div style={{ fontSize: "13px", color: "#6e6e73", marginTop: "8px" }}>
+                  Colors are applied to items in order. Click color dots on income/expense items to cycle through the palette.
+                </div>
+              </div>
+            )}
+
+            {customColors.length === 0 && (
+              <div style={{ 
+                backgroundColor: "#f9f9f9", 
+                padding: "16px", 
+                borderRadius: "8px",
+                border: "1px solid #e5e5e7",
+                marginBottom: "24px"
+              }}>
+                <div style={{ fontSize: "14px", color: "#6e6e73", marginBottom: "8px" }}>
+                  Default Pastel Palette (20 colors)
+                </div>
+                <div style={{ display: "flex", gap: "4px", flexWrap: "wrap", marginBottom: "8px" }}>                  {defaultPastelColors.map((color, index) => (
+                    <div
+                      key={`default-${color}`}
+                      style={{
+                        width: "24px",
+                        height: "24px",
+                        backgroundColor: color,
+                        borderRadius: "4px",
+                        border: "1px solid #e5e5e7"
+                      }}
+                      title={color}
+                    />
+                  ))}
+                </div>
+                <div style={{ fontSize: "13px", color: "#6e6e73" }}>
+                  Add a Coolors URL above to use custom colors instead.
+                </div>
+              </div>
+            )}
+
+            <div style={{ 
+              display: "flex", 
+              justifyContent: "flex-end", 
+              gap: "12px",
+              borderTop: "1px solid #e5e5e7",
+              paddingTop: "16px"
+            }}>
+              {customColors.length > 0 && (                <button
+                  onClick={() => {
+                    setCustomColors([]);
+                    setColorPaletteUrl("");
+                    // Reset all additional items to use default pastel colors
+                    setAdditionalIncomes(prev => prev.map((income, index) => ({
+                      ...income,
+                      color: defaultPastelColors[index % defaultPastelColors.length]
+                    })));
+                    setAdditionalExpenses(prev => prev.map((expense, index) => ({
+                      ...expense,
+                      color: defaultPastelColors[index % defaultPastelColors.length]
+                    })));
+                  }}
+                  style={{
+                    ...styles.button("secondary"),
+                    backgroundColor: "#f2f2f7",
+                    color: "#1d1d1f"
+                  }}
+                >
+                  Reset to Default
+                </button>
+              )}
+              <button
+                onClick={() => setIsColorSettingsOpen(false)}
+                style={{
+                  ...styles.button("primary"),
+                  backgroundColor: "#007aff"
+                }}
+              >
+                Done
               </button>
             </div>
           </div>
